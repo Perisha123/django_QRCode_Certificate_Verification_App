@@ -1,0 +1,3 @@
+<h2>Document Uploaded Successfully</h2>
+<p>Record ID: {{ record_id }}</p>
+<img src="{{ qr }}" width="250">

@@ -1,32 +1,7 @@
-{% extends "./base.html" %}
-{% load static %}
-{% load crispy_forms_tags %}
-{% block content %}
-
-<style>
-    h3 {
-        font-weight: bold;
-    }
-</style>
-
-<div class="container bg-white shadow-md p-5 form-layout">
-    <h3>Enter Your Email Address</h3>
-    
-    <form method="POST" autocomplete="off">
-        {% csrf_token %}
-        <hr>
-        <div class="form-group">
-            {{ user_form.encrypted_byte_code | as_crispy_field }}
-        </div>
-        <br>
-        <div class="button-container">
-            <button type="submit" class="btn btn-primary text-white">
-                Send OTP <i class="fa fa-sign-in" aria-hidden="true"></i>
-            </button>
-        </div>
-        
-        
-    </form>
-</div>
-
-{% endblock %}
+<h2>Verify Document</h2>
+<form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="text" name="record_id" placeholder="Record ID" required>
+    <input type="file" name="document" required>
+    <button type="submit">Verify</button>
+</form>
