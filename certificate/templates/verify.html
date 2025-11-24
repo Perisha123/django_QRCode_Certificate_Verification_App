@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verify Document</title>
+</head>
+<body>
+    <h1>Verify Document</h1>
+
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label>Record ID:</label>
+        <input type="text" name="record_id" required><br><br>
+
+        <label>Upload Document:</label>
+        <input type="file" name="document" required><br><br>
+
+        <button type="submit">Verify</button>
+    </form>
+
+    <p><a href="/">Back to Upload</a></p>
+</body>
+</html>

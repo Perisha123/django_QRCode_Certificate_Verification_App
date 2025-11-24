@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Document Registered</title>
+</head>
+<body>
+    <h1>Document Registered Successfully</h1>
+
+    <p><strong>Record ID:</strong> {{ record_id }}</p>
+
+    <p>QR Code:</p>
+    <img src="{{ qr_path }}" alt="QR Code" width="250">
+
+    <p>
+        <a href="/">Upload Another Document</a> |
+        <a href="/verify/">Verify a Document</a>
+    </p>
+</body>
+</html>
