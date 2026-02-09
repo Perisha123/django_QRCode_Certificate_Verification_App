@@ -138,5 +138,12 @@ EMAIL_USE_TLS = True
 
 CONTRACT_ADDRESS = "YOUR_CONTRACT_ADDRESS"
 CONTRACT_ABI = [
-   PASTE YOUR ABI HERE AS PYTHON LIST
+    {
+   "inputs": [],
+        "name": "myFunction",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+        
 ]
