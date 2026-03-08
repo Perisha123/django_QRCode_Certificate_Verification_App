@@ -1,0 +1,16 @@
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Database
+db.sqlite3
+
+# Node modules
+static/js/node_modules/
+
+# Django log files
+*.log
+*.pot
