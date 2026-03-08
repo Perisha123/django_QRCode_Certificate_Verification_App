@@ -1,78 +1,166 @@
-from django.shortcuts import render
-from django.conf import settings
-from web3 import Web3
 import hashlib
+import json
 import qrcode
-import os
 
-# Connect to Ganache blockchain
-web3 = Web3(Web3.HTTPProvider("http://127.0.0.1:7545"))
+from django.shortcuts import render, redirect
+from django.conf import settings
+from .models import Certificate
 
-# Load smart contract using address + ABI from settings.py
-contract = web3.eth.contract(
-    address=settings.CONTRACT_ADDRESS,
-    abi=settings.CONTRACT_ABI
-)
-
-# Ensure static/qr folder exists
-QR_FOLDER = os.path.join("static", "qr")
-os.makedirs(QR_FOLDER, exist_ok=True)
+from web3 import Web3
 
 
-def upload_document(request):
-    """
-    1. User uploads file
-    2. Create SHA-256 hash
-    3. Store hash on blockchain
-    4. Generate QR code with record ID
-    """
+# ----------------------------
+# Blockchain connection
+# ----------------------------
+
+GANACHE_URL = "http://127.0.0.1:7545"
+
+w3 = Web3(Web3.HTTPProvider(GANACHE_URL))
+
+contract_address = "YOUR_CONTRACT_ADDRESS"
+
+abi = [
+    {
+        "inputs": [{"internalType": "string", "name": "_hash", "type": "string"}],
+        "name": "storeDocument",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "nonpayable",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"internalType": "uint256", "name": "_id", "type": "uint256"},
+            {"internalType": "string", "name": "_hash", "type": "string"},
+        ],
+        "name": "verifyDocument",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+contract = w3.eth.contract(address=contract_address, abi=abi)
+
+
+# ----------------------------
+# SHA256 HASH FUNCTION
+# ----------------------------
+
+def generate_hash(file):
+
+    sha256 = hashlib.sha256()
+
+    for chunk in file.chunks():
+        sha256.update(chunk)
+
+    return sha256.hexdigest()
+
+
+# ----------------------------
+# HOME PAGE
+# ----------------------------
+
+def home(request):
+    return render(request, "home.html")
+
+
+# ----------------------------
+# UPLOAD CERTIFICATE
+# ----------------------------
+
+def upload_certificate(request):
+
     if request.method == "POST":
-        uploaded_file = request.FILES["document"]
-        file_bytes = uploaded_file.read()
 
-        # 1) SHA-256 hash
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file = request.FILES["file"]
 
-        # 2) Store hash on blockchain
-        tx = contract.functions.storeHash(file_hash).transact({
-            "from": web3.eth.accounts[0]
-        })
-        web3.eth.wait_for_transaction_receipt(tx)
+        # Generate hash
+        file_hash = generate_hash(file)
 
-        # 3) Get record ID
-        record_id = contract.functions.counter().call()
+        # Save certificate
+        cert = Certificate.objects.create(
+            file=file,
+            file_hash=file_hash
+        )
 
-        # 4) Generate QR and save
-        qr_path = os.path.join(QR_FOLDER, f"{record_id}.png")
-        img = qrcode.make(str(record_id))
-        img.save(qr_path)
+        # Store hash on blockchain
+        tx = contract.functions.storeDocument(
+            file_hash
+        ).transact(
+            {"from": w3.eth.accounts[0]}
+        )
 
-        return render(request, "success.html", {
-            "record_id": record_id,
-            "qr_path": f"/static/qr/{record_id}.png",
-        })
+        receipt = w3.eth.wait_for_transaction_receipt(tx)
+
+        cert.tx_hash = receipt.transactionHash.hex()
+        cert.blockchain_id = cert.id
+        cert.save()
+
+        # Generate QR
+        generate_qr(cert)
+
+        return redirect("success")
 
     return render(request, "upload.html")
 
 
-def verify_document(request):
-    """
-    1. User enters record ID + uploads file
-    2. Re-hash file
-    3. Compare with blockchain stored hash
-    """
-    if request.method == "POST":
-        record_id = int(request.POST["record_id"])
-        uploaded_file = request.FILES["document"]
-        new_hash = hashlib.sha256(uploaded_file.read()).hexdigest()
+# ----------------------------
+# QR CODE GENERATION
+# ----------------------------
 
-        stored_hash = contract.functions.getHash(record_id).call()
+def generate_qr(cert):
 
-        if new_hash == stored_hash:
-            status = "Authentic Document"
-        else:
-            status = "Tampered Document"
+    data = {
+        "certificate_id": cert.id,
+        "tx_hash": cert.tx_hash,
+        "hash": cert.file_hash,
+    }
 
-        return render(request, "result.html", {"status": status})
+    qr_data = json.dumps(data)
 
-    return render(request, "verify.html")
+    qr = qrcode.make(qr_data)
+
+    qr_path = f"{settings.MEDIA_ROOT}/qr/cert_{cert.id}.png"
+
+    qr.save(qr_path)
+
+
+# ----------------------------
+# VERIFY CERTIFICATE
+# ----------------------------
+
+def verify_certificate(request, cert_id):
+
+    cert = Certificate.objects.get(id=cert_id)
+
+    file = cert.file
+
+    recalculated_hash = generate_hash(file)
+
+    result = contract.functions.verifyDocument(
+        cert.blockchain_id,
+        recalculated_hash
+    ).call()
+
+    if result:
+        status = "VALID CERTIFICATE"
+    else:
+        status = "TAMPERED CERTIFICATE"
+
+    return render(
+        request,
+        "verify.html",
+        {
+            "certificate": cert,
+            "status": status
+        }
+    )
+
+
+# ----------------------------
+# SUCCESS PAGE
+# ----------------------------
+
+def success(request):
+
+    return render(request, "success.html")
