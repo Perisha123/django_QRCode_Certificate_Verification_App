@@ -1,16 +1,39 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title>Blockchain Certificate Verification</title>
-</head>
+{% extends 'base.html' %}
 
-<body>
+{% block content %}
 
-<h1>Blockchain Certificate Verification System</h1>
+<h2 class="text-center mb-5">Blockchain Certificate Verification System</h2>
 
-<p>Secure academic certificate verification using Blockchain.</p>
+<div class="row">
 
-<a href="/upload/">Upload Certificate</a>
+<div class="col-md-6">
 
-</body>
-</html>
+<div class="card p-4 shadow">
+
+<h3>Admin Portal</h3>
+
+<p>University staff upload certificates</p>
+
+<a href="/admin-login/" class="btn btn-primary">Admin Login</a>
+
+</div>
+
+</div>
+
+<div class="col-md-6">
+
+<div class="card p-4 shadow">
+
+<h3>User Portal</h3>
+
+<p>Verify certificate authenticity</p>
+
+<p>Scan QR code or open verification link</p>
+
+</div>
+
+</div>
+
+</div>
+
+{% endblock %}

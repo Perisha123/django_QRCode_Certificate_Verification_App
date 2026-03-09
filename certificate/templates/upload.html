@@ -1,18 +1,17 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title>Upload Certificate</title>
-</head>
+{% extends 'base.html' %}
 
-<body>
+{% block content %}
 
-<h2>Upload Certificate</h2>
+<h3>Upload Certificate</h3>
 
-<form method="POST" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="file" name="certificate_file">
-    <button type="submit">Upload</button>
+<form method="post" enctype="multipart/form-data">
+
+{% csrf_token %}
+
+{{ form.as_p }}
+
+<button class="btn btn-success">Upload</button>
+
 </form>
 
-</body>
-</html>
+{% endblock %}

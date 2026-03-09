@@ -1,16 +1,15 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Verification Result</title>
-</head>
-<body>
-    <h1>Verification Result</h1>
+{% extends 'base.html' %}
 
-    <h2>{{ status }}</h2>
+{% block content %}
 
-    <p>
-        <a href="/">Upload New Document</a> |
-        <a href="/verify/">Verify Another Document</a>
-    </p>
-</body>
-</html>
+<h3>Certificate Uploaded</h3>
+
+<p>Hash:</p>
+
+<p>{{ hash }}</p>
+
+<h4>QR Code</h4>
+
+<img src="/media/{{ certificate.qr_code }}" width="200">
+
+{% endblock %}

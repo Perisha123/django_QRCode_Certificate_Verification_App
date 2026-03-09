@@ -1,63 +1,131 @@
+import hashlib
+import qrcode
 import os
-import json
+
 from django.shortcuts import render, redirect
-from django.http import HttpResponse, JsonResponse
-from web3 import Web3
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 
-# Connect to Ganache
-w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:7545"))
 
-# Contract address (your deployed contract)
-CONTRACT_ADDRESS = "0x980bBAD5bfA4Dd5b09BF40CFBf704ECdD07Cd5D6"
+from .models import Certificate
+from .forms import CertificateForm
 
-# Base directory
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Load contract ABI
-with open(os.path.join(BASE_DIR, 'blockchain', 'contracts', 'DocumentVerification.json')) as f:
-    contract_json = json.load(f)
-    contract_abi = contract_json['contracts']['DocumentVerification.sol']['DocumentVerification']['abi']
-
-# Initialize contract
-contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
-
-# Home view
+# --------------------------------------
+# HOME PAGE
+# --------------------------------------
 def home(request):
-    return render(request, "home.html")
-# Upload certificate
-def upload_certificate(request):
+    return render(request, 'home.html')
+
+
+# --------------------------------------
+# ADMIN LOGIN
+# --------------------------------------
+def admin_login(request):
+    # --- Ensure default admin exists (run once at server start) ---
+
     if request.method == "POST":
-        uploaded_file = request.FILES.get('certificate_file')
-        if not uploaded_file:
-            return HttpResponse("No file uploaded!")
+        username = request.POST['username']
+        password = request.POST['password']
 
-        # Save uploaded file locally
-        save_dir = os.path.join(BASE_DIR, 'uploaded_files')
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, uploaded_file.name)
+        user = authenticate(request, username=username, password=password)
 
-        with open(save_path, 'wb+') as destination:
-            for chunk in uploaded_file.chunks():
-                destination.write(chunk)
+        if user and user.is_staff:  # only allow staff/admin
+            login(request, user)
+            messages.success(request, f"Welcome {user.username}!")
+            return redirect('dashboard')
+        else:
+            messages.error(request, "Invalid username or password")
 
-        # Compute file hash (SHA256) for blockchain
-        import hashlib
-        uploaded_file.seek(0)  # rewind file pointer
-        file_hash = hashlib.sha256(uploaded_file.read()).hexdigest()
+    return render(request, 'admin_login.html')
 
-        # Send transaction to blockchain (register document)
-        tx_hash = contract.functions.registerDocument(file_hash).transact({'from': w3.eth.accounts[0]})
-        w3.eth.wait_for_transaction_receipt(tx_hash)
 
-        return HttpResponse(f"File uploaded and registered successfully! Hash: {file_hash}")
+# --------------------------------------
+# ADMIN LOGOUT
+# --------------------------------------
+@login_required
+def admin_logout(request):
+    logout(request)
+    messages.success(request, "You have been logged out successfully.")
+    return redirect('admin_login')
 
-    return render(request, 'upload.html')
 
-# Success view (optional)
-def success(request):
-    return HttpResponse("Success!")
+# --------------------------------------
+# ADMIN DASHBOARD
+# --------------------------------------
+@login_required
+def dashboard(request):
+    if not request.user.is_staff:
+        messages.error(request, "Access denied: Admins only.")
+        return redirect('home')
 
-    from django.http import JsonResponse
+    certificates = Certificate.objects.all().order_by('-created_at')
+    total = certificates.count()
 
-def get_counter(request):
-    return JsonResponse({"counter": 1})
+    return render(request, 'admin_dashboard.html', {
+        'certificates': certificates,
+        'total': total
+    })
+
+
+# --------------------------------------
+# UPLOAD CERTIFICATE
+# --------------------------------------
+@login_required
+def upload_certificate(request):
+    if not request.user.is_staff:
+        messages.error(request, "Access denied: Admins only.")
+        return redirect('home')
+
+    if request.method == "POST":
+        form = CertificateForm(request.POST, request.FILES)
+
+        if form.is_valid():
+            certificate = form.save(commit=False)
+            file = request.FILES['certificate_file']
+
+            # generate SHA256 hash
+            hash_value = hashlib.sha256(file.read()).hexdigest()
+            certificate.file_hash = hash_value
+            certificate.save()
+
+            # ensure qr_codes folder exists
+            qr_dir = os.path.join(settings.MEDIA_ROOT, 'qr_codes')
+            os.makedirs(qr_dir, exist_ok=True)
+
+            # create QR code
+            verify_url = f"http://127.0.0.1:8000/verify/{hash_value}"
+            qr = qrcode.make(verify_url)
+            qr_path = os.path.join(qr_dir, f"{hash_value}.png")
+            qr.save(qr_path)
+
+            certificate.qr_code = f"qr_codes/{hash_value}.png"
+            certificate.save()
+
+            messages.success(request, "Certificate uploaded successfully!")
+            return render(request, 'result.html', {
+                'certificate': certificate,
+                'hash': hash_value
+            })
+    else:
+        form = CertificateForm()
+
+    return render(request, 'upload_certificate.html', {'form': form})
+
+
+# --------------------------------------
+# VERIFY CERTIFICATE
+# --------------------------------------
+def verify_certificate(request, hash):
+    try:
+        certificate = Certificate.objects.get(file_hash=hash)
+        status = "VALID CERTIFICATE"
+    except Certificate.DoesNotExist:
+        certificate = None
+        status = "INVALID CERTIFICATE"
+
+    return render(request, 'verify.html', {
+        'status': status,
+        'certificate': certificate
+    })
