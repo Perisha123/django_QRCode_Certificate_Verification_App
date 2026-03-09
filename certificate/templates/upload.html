@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Upload Document - Blockchain Verification</title>
+<title>Upload Certificate</title>
 </head>
+
 <body>
-    <h1>Upload Document</h1>
 
-    <form method="POST" enctype="multipart/form-data">
-        {% csrf_token %}
-        <input type="file" name="document" required>
-        <button type="submit">Upload & Register</button>
-    </form>
+<h2>Upload Certificate</h2>
 
-    <p><a href="/verify/">Go to Verification Page</a></p>
+<form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="certificate_file">
+    <button type="submit">Upload</button>
+</form>
+
 </body>
 </html>

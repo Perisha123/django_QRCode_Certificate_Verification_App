@@ -1,0 +1,4 @@
+
+# blockchain_config.py
+CONTRACT_ADDRESS = "0xf7DBAB9DA10A5343E607dABE75A63BDe9EE9e9DB"
+RPC_URL = "http://127.0.0.1:7545"  # G
