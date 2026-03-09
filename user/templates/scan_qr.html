@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Scan QR Code</h2>
+<form method="post">
+    {% csrf_token %}
+    <input type="text" name="qr_code" class="form-control" placeholder="Enter QR code value">
+    <button type="submit" class="btn btn-primary mt-2">Verify</button>
+</form>
+
+{% if result %}
+    <div class="alert alert-info mt-2">{{ result }}</div>
+{% endif %}
+<a href="{% url 'user_dashboard' %}" class="btn btn-secondary mt-2">Back to Dashboard</a>
+{% endblock %}

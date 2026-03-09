@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Dashboard</h2>
+<p>Welcome, {{ request.user.username }}!</p>
+<a href="{% url 'scan_qr' %}" class="btn btn-info">Scan QR Code</a>
+<a href="{% url 'user_logout' %}" class="btn btn-danger">Logout</a>
+
+<h3>Your Certificates</h3>
+<ul>
+{% for cert in certificates %}
+    <li>{{ cert.name }} - {{ cert.uploaded_at }}</li>
+{% empty %}
+    <li>No certificates uploaded yet.</li>
+{% endfor %}
+</ul>
+{% endblock %}
