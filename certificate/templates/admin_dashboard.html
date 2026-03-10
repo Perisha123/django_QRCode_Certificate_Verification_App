@@ -6,17 +6,34 @@
 </head>
 <body>
 
+<!-- Navbar with Logout Button -->
 <nav class="navbar navbar-dark bg-primary">
-  <span class="navbar-brand">Admin Dashboard</span>
-  <a href="{% url 'admin_logout' %}" class="btn btn-light">Logout</a>
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1">Admin Dashboard</span>
+    <div class="d-flex">
+      <a href="{% url 'upload' %}" class="btn btn-success me-2">Upload Certificate</a>
+      <a href="{% url 'admin_logout' %}" class="btn btn-light">Logout</a>
+    </div>
+  </div>
 </nav>
 
 <div class="container mt-4">
+
+  <!-- Flash Messages -->
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Total Certificates -->
   <h4>Total Certificates: {{ total|default:"0" }}</h4>
 
-  <a href="{% url 'upload' %}" class="btn btn-success mb-3">Upload Certificate</a>
-
-  <table class="table table-bordered table-striped">
+  <!-- Certificates Table -->
+  <table class="table table-bordered table-striped mt-3">
     <thead class="table-dark">
       <tr>
         <th>Name</th>
@@ -30,10 +47,13 @@
         <tr>
           <td>{{ cert.name|default:"N/A" }}</td>
           <td>{{ cert.email|default:"N/A" }}</td>
-          <td>{{ cert.file_hash|default:"N/A" }}</td>
+          <td style="word-break: break-all;">{{ cert.file_hash|default:"N/A" }}</td>
           <td>
             {% if cert.qr_code %}
-              <img src="{{ cert.qr_code.url }}" width="80" alt="QR Code">
+              <!-- Clickable QR Code -->
+              <a href="{{ cert.qr_code.url }}" target="_blank">
+                <img src="{{ cert.qr_code.url }}" width="80" alt="QR Code">
+              </a>
             {% else %}
               N/A
             {% endif %}
@@ -46,7 +66,11 @@
       {% endfor %}
     </tbody>
   </table>
+
 </div>
+
+<!-- Bootstrap JS for alerts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>

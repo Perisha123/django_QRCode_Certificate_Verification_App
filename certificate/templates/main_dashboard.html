@@ -1,0 +1,23 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Main Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5 text-center">
+    <h2>Main Dashboard</h2>
+    <p>Welcome, {{ request.user.username }}! Choose a portal:</p>
+
+    <div class="d-grid gap-3 mt-4" style="max-width: 300px; margin: auto;">
+        <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg">Admin Portal</a>
+        <a href="{% url 'home' %}" class="btn btn-info btn-lg">User Portal</a>
+        <a href="{% url 'admin_logout' %}" class="btn btn-danger btn-lg">Logout</a>
+    </div>
+</div>
+
+</body>
+</html>

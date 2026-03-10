@@ -108,7 +108,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Pacific/Auckland'
 
 USE_I18N = True
 
@@ -141,3 +141,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CONTRACT_ADDRESS = ""
 
 CONTRACT_ABI = []
+
+# LOGIN REDIRECTS
+LOGIN_URL = '/admin-login/'
+LOGIN_REDIRECT_URL = '/admin-dashboard/'
