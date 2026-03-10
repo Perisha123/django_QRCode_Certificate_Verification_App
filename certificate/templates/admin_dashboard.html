@@ -12,20 +12,39 @@
 </nav>
 
 <div class="container mt-4">
-  <h4>Total Certificates: {{ total }}</h4>
+  <h4>Total Certificates: {{ total|default:"0" }}</h4>
 
   <a href="{% url 'upload' %}" class="btn btn-success mb-3">Upload Certificate</a>
 
-  <table class="table table-bordered">
-    <tr><th>Name</th><th>Email</th><th>Hash</th><th>QR</th></tr>
-    {% for cert in certificates %}
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
       <tr>
-        <td>{{ cert.name }}</td>
-        <td>{{ cert.email }}</td>
-        <td>{{ cert.file_hash }}</td>
-        <td><img src="{{ cert.qr_code.url }}" width="80"></td>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Hash</th>
+        <th>QR</th>
       </tr>
-    {% endfor %}
+    </thead>
+    <tbody>
+      {% for cert in certificates %}
+        <tr>
+          <td>{{ cert.name|default:"N/A" }}</td>
+          <td>{{ cert.email|default:"N/A" }}</td>
+          <td>{{ cert.file_hash|default:"N/A" }}</td>
+          <td>
+            {% if cert.qr_code %}
+              <img src="{{ cert.qr_code.url }}" width="80" alt="QR Code">
+            {% else %}
+              N/A
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" class="text-center">No certificates uploaded yet.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
   </table>
 </div>
 

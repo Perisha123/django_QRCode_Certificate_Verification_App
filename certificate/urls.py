@@ -11,5 +11,5 @@ urlpatterns = [
     path('upload/', views.upload_certificate, name='upload'),
 
     # Verification
-    path('verify/<str:hash>/', views.verify_certificate, name='verify'),
+    path('verify/<str:file_hash>/', views.verify_certificate, name='verify'),
 ]

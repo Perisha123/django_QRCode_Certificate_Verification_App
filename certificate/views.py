@@ -1,13 +1,14 @@
 import hashlib
 import qrcode
 import os
+from io import BytesIO
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
+from django.contrib.admin.views.decorators import staff_member_required
 
 from .models import Certificate
 from .forms import CertificateForm
@@ -49,12 +50,8 @@ def admin_logout(request):
 
 # --------------------------------------------------
 # ADMIN DASHBOARD
-@login_required
+@staff_member_required(login_url='admin_login')
 def dashboard(request):
-    if not request.user.is_staff:
-        messages.error(request, "Admins only can access this page")
-        return redirect('home')
-
     certificates = Certificate.objects.order_by('-created_at')
     total = certificates.count()
 
@@ -66,31 +63,31 @@ def dashboard(request):
 
 # --------------------------------------------------
 # UPLOAD CERTIFICATE
-@login_required
+@staff_member_required(login_url='admin_login')
 def upload_certificate(request):
-    if not request.user.is_staff:
-        messages.error(request, "Admins only can upload")
-        return redirect('home')
-
     if request.method == "POST":
         form = CertificateForm(request.POST, request.FILES)
 
         if form.is_valid():
             certificate = form.save(commit=False)
+
+            # Calculate SHA256 hash of uploaded file
             file_data = request.FILES['file'].read()
             hash_value = hashlib.sha256(file_data).hexdigest()
             certificate.file_hash = hash_value
             certificate.save()
 
-            # Create QR code
-            qr = qrcode.make(f"{request.scheme}://{request.get_host()}/verify/{hash_value}")
-            qr_path = os.path.join(settings.MEDIA_ROOT, "qr_codes", f"{hash_value}.png")
-            os.makedirs(os.path.dirname(qr_path), exist_ok=True)
+            # Generate QR code
+            qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}"
+            qr = qrcode.make(qr_url)
+            qr_dir = os.path.join(settings.MEDIA_ROOT, "qr_codes")
+            os.makedirs(qr_dir, exist_ok=True)
+            qr_path = os.path.join(qr_dir, f"{hash_value}.png")
             qr.save(qr_path)
             certificate.qr_code.name = f"qr_codes/{hash_value}.png"
             certificate.save()
 
-            messages.success(request, "Certificate uploaded!")
+            messages.success(request, "Certificate uploaded successfully!")
             return redirect('dashboard')
 
     else:
@@ -101,9 +98,9 @@ def upload_certificate(request):
 
 # --------------------------------------------------
 # VERIFY CERTIFICATE (User)
-def verify_certificate(request, hash):
+def verify_certificate(request, file_hash):
     try:
-        certificate = Certificate.objects.get(file_hash=hash)
+        certificate = Certificate.objects.get(file_hash=file_hash)
         status = "VALID CERTIFICATE"
     except Certificate.DoesNotExist:
         certificate = None
