@@ -16,7 +16,7 @@ from .forms import CertificateForm
 
 
 # --------------------------------------------------
-# HOME PAGE (User Portal)
+# HOME PAGE
 
 def home(request):
     return render(request, 'home.html')
@@ -75,9 +75,9 @@ def dashboard(request):
 
 
 # --------------------------------------------------
-# UPLOAD CERTIFICATE
+# UPLOAD CERTIFICATE (Admin + Logged Users)
 
-@staff_member_required(login_url='admin_login')
+@login_required(login_url='users_login')
 def upload_certificate(request):
 
     show_qr = None
@@ -90,7 +90,7 @@ def upload_certificate(request):
 
             certificate = form.save(commit=False)
 
-            # Generate SHA256 hash
+            # Generate SHA256 Hash
             file_obj = request.FILES['file']
             file_data = file_obj.read()
 
@@ -99,13 +99,21 @@ def upload_certificate(request):
             file_obj.seek(0)
 
             certificate.file_hash = hash_value
+
+            # save user
+            certificate.uploaded_by = request.user
+
             certificate.save()
 
-            # Generate QR Code
+            # ---------------------------
+            # QR CODE GENERATION
+            # ---------------------------
+
             random_suffix = get_random_string(6)
+
             filename = f"{hash_value}_{random_suffix}.png"
 
-            qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}"
+            qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
 
             qr_dir = os.path.join(settings.MEDIA_ROOT, "qr_codes")
 
@@ -121,6 +129,7 @@ def upload_certificate(request):
             )
 
             qr.add_data(qr_url)
+
             qr.make(fit=True)
 
             img = qr.make_image(fill_color="black", back_color="white")
@@ -131,7 +140,7 @@ def upload_certificate(request):
 
             certificate.save()
 
-            messages.success(request, "Certificate uploaded successfully with QR code!")
+            messages.success(request, "Certificate uploaded successfully!")
 
             show_qr = certificate.qr_code.url
 
@@ -168,3 +177,29 @@ def verify_certificate(request, file_hash):
         'status': status,
         'certificate': certificate
     })
+# --------------------------------------------------
+# USER DASHBOARD
+
+@login_required(login_url='users_login')
+def users_dashboard(request):
+
+    certificates = Certificate.objects.filter(uploaded_by=request.user)
+
+    return render(request, 'users_dashboard.html', {
+        'certificates': certificates
+    })
+
+@login_required(login_url='users_login')
+def qr_scan(request):
+    return render(request, 'qr_scan.html')
+# --------------------------------------------------
+# USER LOGOUT
+
+@login_required(login_url='users_login')
+def users_logout(request):
+
+    logout(request)
+
+    messages.success(request, "You have logged out successfully.")
+
+    return redirect('home')   # goes to user portal home page

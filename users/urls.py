@@ -1,10 +1,16 @@
 from django.urls import path
-from . import views
+from django.contrib.auth.views import LogoutView
+from certificate import views as cert_views
+from users.views import users_access, users_login, users_register, users_dashboard
 
 urlpatterns = [
-    path('register/', views.user_register, name='user_register'),
-    path('login/', views.user_login, name='user_login'),
-    path('logout/', views.user_logout, name='user_logout'),
-    path('dashboard/', views.user_dashboard, name='user_dashboard'),
-    path('scan/', views.scan_qr, name='scan_qr'),
+    path('access/', users_access, name='users_access'),   # User portal access page
+    path('register/', users_register, name='users_register'),
+    path('login/', users_login, name='users_login'),
+    path('dashboard/', users_dashboard, name='users_dashboard'),
+
+# QR Scan page for users
+    path('scan/', cert_views.qr_scan, name='qr_scan'),
+    # Logout and redirect to portal home page
+    path('logout/', LogoutView.as_view(next_page='home'), name='users_logout'),
 ]

@@ -1,0 +1,100 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+</head>
+
+<body class="bg-light">
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">Certificate Portal</a>
+
+        <form action="{% url 'users_logout' %}" method="POST" class="d-flex">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Logout</button>
+        </form>
+    </div>
+</nav>
+
+<div class="container mt-5">
+
+    <!-- Welcome -->
+    <h2 class="mb-4">Welcome, {{ request.user.first_name }}</h2>
+
+    <!-- Action Buttons -->
+    <div class="row mb-4">
+
+        <div class="col-md-3 mb-2">
+            <a href="{% url 'upload_certificate' %}" class="btn btn-success w-100">
+                ⬆️ Upload Certificate
+            </a>
+        </div>
+
+        <div class="col-md-3 mb-2">
+            <a href="{% url 'qr_scan' %}" class="btn btn-warning w-100">
+                📱 Scan QR Code
+            </a>
+        </div>
+
+    </div>
+
+    <hr>
+
+    <!-- Certificates -->
+    <h4 class="mt-4 mb-3">Your Uploaded Certificates</h4>
+
+    <div class="row">
+
+        {% if certificates %}
+
+            {% for cert in certificates %}
+
+            <div class="col-md-4 mb-4">
+                <div class="card shadow-sm h-100">
+
+                    <div class="card-body">
+
+                        <h5 class="card-title">{{ cert.name }}</h5>
+
+                        <p class="text-muted">
+                            Uploaded: {{ cert.created_at|date:"M d, Y H:i" }}
+                        </p>
+
+                        <a href="{% url 'qr_verify' cert.file_hash %}" class="btn btn-info w-100 mb-2">
+                            🔎 Verify Certificate
+                        </a>
+
+                        {% if cert.qr_code %}
+                        <img src="{{ cert.qr_code.url }}" class="img-fluid mt-2">
+                        {% endif %}
+
+                    </div>
+
+                </div>
+            </div>
+
+            {% endfor %}
+
+        {% else %}
+
+        <div class="col-12">
+            <div class="alert alert-secondary">
+                You have not uploaded any certificates yet.
+            </div>
+        </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
