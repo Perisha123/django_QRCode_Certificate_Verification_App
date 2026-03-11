@@ -13,7 +13,21 @@ from qrcode.constants import ERROR_CORRECT_H
 
 from .models import Certificate
 from .forms import CertificateForm
+from web3 import Web3  # Blockchain integration
+# --------------------------------------------------
+# CONNECT TO LOCAL BLOCKCHAIN (Ganache)
+# --------------------------------------------------
+w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))  # Ganache default RPC
+if w3.is_connected():
+    print("Connected to Blockchain ✅")
+else:
+    print("Blockchain connection failed ❌")
 
+# Example account to send transactions (Ganache pre-funded account)
+default_account = w3.eth.accounts[0]
+w3.eth.default_account = default_account
+
+# --------------------------------------------------
 
 # --------------------------------------------------
 # HOME PAGE
@@ -75,50 +89,38 @@ def dashboard(request):
 
 
 # --------------------------------------------------
-# UPLOAD CERTIFICATE (Admin + Logged Users)
-
+# UPLOAD CERTIFICATE (User + Blockchain)
 @login_required(login_url='users_login')
 def upload_certificate(request):
 
+    # Initialize variables so they exist on GET requests
     show_qr = None
+    blockchain_status = None
+    blockchain_status_class = None
+    filename = None
 
     if request.method == "POST":
-
         form = CertificateForm(request.POST, request.FILES)
-
         if form.is_valid():
-
             certificate = form.save(commit=False)
 
-            # Generate SHA256 Hash
+            # Generate SHA256 hash
             file_obj = request.FILES['file']
             file_data = file_obj.read()
-
             hash_value = hashlib.sha256(file_data).hexdigest()
-
             file_obj.seek(0)
-
             certificate.file_hash = hash_value
 
-            # save user
+            # Save uploaded user
             certificate.uploaded_by = request.user
-
             certificate.save()
 
-            # ---------------------------
-            # QR CODE GENERATION
-            # ---------------------------
-
+            # Generate QR code
             random_suffix = get_random_string(6)
-
             filename = f"{hash_value}_{random_suffix}.png"
-
             qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
-
             qr_dir = os.path.join(settings.MEDIA_ROOT, "qr_codes")
-
             os.makedirs(qr_dir, exist_ok=True)
-
             qr_path = os.path.join(qr_dir, filename)
 
             qr = qrcode.QRCode(
@@ -127,38 +129,49 @@ def upload_certificate(request):
                 box_size=10,
                 border=4,
             )
-
             qr.add_data(qr_url)
-
             qr.make(fit=True)
-
             img = qr.make_image(fill_color="black", back_color="white")
-
             img.save(qr_path)
-
             certificate.qr_code.name = f"qr_codes/{filename}"
-
             certificate.save()
-
-            messages.success(request, "Certificate uploaded successfully!")
 
             show_qr = certificate.qr_code.url
 
+            # Record on Blockchain
+            try:
+                tx_hash = w3.eth.send_transaction({
+                    'from': default_account,
+                    'to': default_account,
+                    'value': 0,
+                    'data': hash_value.encode('utf-8')
+                })
+                w3.eth.wait_for_transaction_receipt(tx_hash)
+                recorded_on_blockchain = True
+            except Exception as e:
+                print("Blockchain recording failed:", e)
+                recorded_on_blockchain = False
+
+            blockchain_status = "Recorded on Blockchain" if recorded_on_blockchain else "Not recorded"
+            blockchain_status_class = "bg-success text-white" if recorded_on_blockchain else "bg-secondary text-white"
+
+            messages.success(request, "Certificate uploaded successfully!")
+
+            # Reset form
             form = CertificateForm()
 
     else:
-
         form = CertificateForm()
 
-    return render(request, 'upload_certificate.html', {
+    return render(request, 'user_upload_certificate.html', {
         'form': form,
-        'show_qr': show_qr
+        'show_qr': show_qr,
+        'qr_filename': filename if show_qr else None,
+        'blockchain_status': blockchain_status,
+        'blockchain_status_class': blockchain_status_class,
     })
-
-
 # --------------------------------------------------
 # VERIFY CERTIFICATE
-
 def verify_certificate(request, file_hash):
 
     try:

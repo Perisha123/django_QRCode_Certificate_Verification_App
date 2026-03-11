@@ -8,14 +8,70 @@ from django.conf import settings
 import hashlib
 import qrcode
 import os
+import json
 from django.utils.crypto import get_random_string
 from qrcode.constants import ERROR_CORRECT_H
+from web3 import Web3
+from django.conf import settings
 
 # Import Certificate model and form
 from certificate.models import Certificate
 from certificate.forms import CertificateForm
 
+# Connect to Ganache
+# -----------------------------
+w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
 
+if w3.is_connected():
+    print("Connected to Ganache!")
+else:
+    print("Failed to connect.")
+
+# -----------------------------
+# Load deployed contract ABI and bytecode
+# -----------------------------
+CONTRACT_ADDRESS = "0x2c61d671Dd1DbD60eB57672491E898f79Bf64ff0"  # Replace with your deployed contract
+
+contract_path = os.path.join(
+    settings.BASE_DIR,
+    "blockchain",
+    "contracts",
+    "DocumentVerification.json"
+)
+
+with open(contract_path) as f:
+    contract_json = json.load(f)
+
+# Access the correct nested structure
+contract_data = contract_json["contracts"]["DocumentVerification.sol"]["DocumentVerification"]
+ABI = contract_data["abi"]
+BYTECODE = contract_data["evm"]["bytecode"]["object"]
+
+# -----------------------------
+# Load contract instance
+# -----------------------------
+contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
+
+print("Contract loaded successfully!")
+# -----------------------------
+# View blockchain certificates
+# -----------------------------
+def view_certificates_blockchain(request):
+    certificates = []
+    try:
+        total = contract.functions.counter().call()  # Get total stored documents
+        for i in range(1, total + 1):
+            doc = contract.functions.getDocument(i).call()
+            certificates.append({
+                "id": i,
+                "file_hash": doc[0],
+                "timestamp": doc[1],
+                "owner": doc[2],
+            })
+    except Exception as e:
+        print("Error fetching blockchain data:", e)
+
+    return render(request, "users/blockchain_certificates.html", {"certificates": certificates})
 # -------------------------
 # User access page (Login/Register selection)
 # -------------------------
@@ -96,73 +152,77 @@ def users_login(request):
 
     return render(request, "users_login.html")
 
+# -----------------------------
+# Blockchain interaction helpers
+# -----------------------------
+def add_certificate(cert_id):
+    """Add certificate ID to blockchain"""
+    try:
+        tx = contract.functions.addCertificate(cert_id).transact({'from': w3.eth.accounts[0]})
+        w3.eth.wait_for_transaction_receipt(tx)
+        return True
+    except Exception as e:
+        print("Error adding certificate to blockchain:", e)
+        return False
 
+def verify_certificate(cert_id):
+    """Check if certificate ID exists on blockchain"""
+    try:
+        return contract.functions.verifyCertificate(cert_id).call()
+    except Exception as e:
+        print("Error verifying certificate:", e)
+        return False
 # -------------------------
 # User dashboard
 # -------------------------
-@login_required(login_url='users_login')
+@login_required
 def users_dashboard(request):
-    """User dashboard showing uploaded certificates"""
-    certificates = Certificate.objects.filter(user=request.user).order_by('-created_at')
-    return render(request, "users_dashboard.html", {'certificates': certificates})
+    certificates = Certificate.objects.filter(user=request.user)
 
+    # Verify blockchain status for each certificate
+    certs_with_status = []
+    for cert in certificates:
+        # Push to blockchain if not already recorded
+        if not verify_certificate(cert.id):
+            add_certificate(cert.id)
+
+        blockchain_status = verify_certificate(cert.id)
+        certs_with_status.append({
+            'cert': cert,
+            'blockchain_status': blockchain_status
+        })
+
+    return render(request, "users_dashboard.html", {
+        'certificates': certs_with_status
+    })
 
 # -------------------------
 # Upload certificate
 # -------------------------
-@login_required(login_url='users_login')
+@login_required
 def upload_certificate(request):
-    """Upload certificate and generate QR code"""
-    show_qr = None
+    # Initialize variable to avoid UnboundLocalError
+    blockchain_status = None
 
     if request.method == "POST":
         form = CertificateForm(request.POST, request.FILES)
         if form.is_valid():
             certificate = form.save(commit=False)
-
-            # Generate SHA256 hash
-            file_obj = request.FILES['file']
-            file_data = file_obj.read()
-            hash_value = hashlib.sha256(file_data).hexdigest()
-            file_obj.seek(0)
-            certificate.file_hash = hash_value
-
-            # Assign logged-in user
-            certificate.uploaded_by = request.user
-
+            certificate.user = request.user
             certificate.save()
 
-            # Generate QR code
-            random_suffix = get_random_string(6)
-            filename = f"{hash_value}_{random_suffix}.png"
-            qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
-            qr_dir = os.path.join(settings.MEDIA_ROOT, "qr_codes")
-            os.makedirs(qr_dir, exist_ok=True)
-            qr_path = os.path.join(qr_dir, filename)
-
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=ERROR_CORRECT_H,
-                box_size=10,
-                border=4,
-            )
-            qr.add_data(qr_url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            img.save(qr_path)
-
-            certificate.qr_code.name = f"qr_codes/{filename}"
-            certificate.save()
-
-            messages.success(request, "Certificate uploaded successfully!")
-            return redirect('users_dashboard')
-
+            # Example: simulate blockchain addition
+            blockchain_status = "Certificate successfully added to blockchain!"
+        else:
+            blockchain_status = "Failed to upload certificate. Please check the form."
     else:
         form = CertificateForm()
 
-    return render(request, 'upload_certificate.html', {'form': form, 'show_qr': show_qr})
-
-
+    return render(request, "user_upload_certificate.html", {
+        'form': form,
+        'blockchain_status': blockchain_status,
+    })
+   
 # -------------------------
 # User logout
 # -------------------------
@@ -171,3 +231,4 @@ def users_logout(request):
     logout(request)
     messages.success(request, "You have been logged out successfully.")
     return redirect('home')
+    

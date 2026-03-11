@@ -1,47 +1,29 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
 contract DocumentVerification {
-
-    struct Record {
+    struct Document {
         string fileHash;
-        uint256 timestamp;
+        uint timestamp;
         address owner;
     }
 
-    mapping(uint256 => Record) public records;
-    uint256 public counter;
+    Document[] public documents;
 
-    // Store document hash on blockchain
-    function storeDocument(string memory _hash) public returns (uint256) {
-        counter++;
-
-        records[counter] = Record(
-            _hash,
-            block.timestamp,
-            msg.sender
-        );
-
-        return counter;
+    function addcertificate(string memory fileHash) public {
+        documents.push(Document(fileHash, block.timestamp, msg.sender));
     }
 
-    // Retrieve stored hash
-    function getDocument(uint256 _id) public view returns (
-        string memory,
-        uint256,
-        address
-    ) {
-        Record memory r = records[_id];
-        return (r.fileHash, r.timestamp, r.owner);
+    function verifycertificate(uint index) public view returns (bool) {
+        return index < documents.length;
     }
 
-    // Verify hash
-    function verifyDocument(uint256 _id, string memory _hash)
-        public view returns (bool)
-    {
-        Record memory r = records[_id];
+    function getDocument(uint index) public view returns (string memory, uint, address) {
+        Document storage doc = documents[index];
+        return (doc.fileHash, doc.timestamp, doc.owner);
+    }
 
-        return keccak256(bytes(r.fileHash))
-        == keccak256(bytes(_hash));
+    function counter() public view returns (uint) {
+        return documents.length;
     }
 }

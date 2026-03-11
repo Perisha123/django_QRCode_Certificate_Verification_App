@@ -10,7 +10,10 @@ urlpatterns = [
     path('admin-dashboard/', views.dashboard, name='dashboard'),
     
     # Upload certificate
-    path('upload/', views.upload_certificate, name='upload_certificate'),  # matches template
+    path('upload/', views.upload_certificate, name='upload'),
+        # matches template
+        # User-specific certificate upload
+path('user-upload/', views.user_upload_certificate, name='user_upload_certificate'),
 
     # Verify certificate
     path('verify/<str:file_hash>/', views.verify_certificate, name='qr_verify'),  # matches template
