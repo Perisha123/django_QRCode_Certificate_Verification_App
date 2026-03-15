@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Edit Certificate</h2>
+    <hr>
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+
+        {% if form.instance.qr_code %}
+        <div class="mb-3">
+            <label>Current QR Code:</label><br>
+            <img src="{{ form.instance.qr_code.url }}" alt="QR Code" width="150">
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-success">Save Changes</button>
+        <a href="{% url 'upload_certificate' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

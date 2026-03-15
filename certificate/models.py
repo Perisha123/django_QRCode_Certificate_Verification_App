@@ -30,4 +30,4 @@ class Certificate(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.title} - {self.user.username if self.user else 'Nouser'}"
+        return f"{self.name} - {self.user.username if self.user else 'Nouser'}"

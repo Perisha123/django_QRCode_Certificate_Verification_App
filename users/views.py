@@ -7,16 +7,23 @@ from django.core.mail import send_mail
 from django.conf import settings
 import hashlib
 import qrcode
+from .models import UserProfile
+from io import BytesIO
+from django.core.files import File
+from django.shortcuts import get_object_or_404
+
 import os
 import json
 from django.utils.crypto import get_random_string
 from qrcode.constants import ERROR_CORRECT_H
 from web3 import Web3
 from django.conf import settings
+from certificate.blockchain import user_certificates, verify_certificate, add_certificate_to_blockchain
 
 # Import Certificate model and form
 from certificate.models import Certificate
 from certificate.forms import CertificateForm
+from users.forms import UserCertificateUploadForm
 
 # Connect to Ganache
 # -----------------------------
@@ -76,10 +83,11 @@ def view_certificates_blockchain(request):
 # User access page (Login/Register selection)
 # -------------------------
 def users_access(request):
-    if request.user.is_authenticated:
-        return redirect('users_dashboard')
-    return render(request, "users_access.html")
-
+    # Only staff/admins go to admin dashboard
+    if request.user.is_staff:
+        return redirect('users:dashboard')
+    # Normal user sees user dashboard
+    return render(request, 'users_access.html')
 
 # -------------------------
 # User registration
@@ -121,7 +129,7 @@ def users_register(request):
         )
 
         messages.success(request, "Registration successful. Please log in.")
-        return redirect('users_login')
+        return redirect('users:users_dashboard')
 
     return render(request, "users_register.html")
 
@@ -129,9 +137,10 @@ def users_register(request):
 # -------------------------
 # User login
 # -------------------------
+
 def users_login(request):
     if request.user.is_authenticated:
-        return redirect('users_dashboard')
+        return redirect('users:dashboard')  # user already logged in
 
     if request.method == "POST":
         email = request.POST.get('email')
@@ -139,32 +148,30 @@ def users_login(request):
 
         if not email or not password:
             messages.error(request, "Both email and password are required.")
-            return redirect('users_login')
+            return redirect('users:login')
 
-        user = authenticate(request, username=email, password=password)
+        try:
+            user_obj = User.objects.get(email=email)
+            user = authenticate(request, username=user_obj.username, password=password)
+        except User.DoesNotExist:
+            user = None
+
         if user:
             login(request, user)
             messages.success(request, f"Welcome back, {user.first_name}!")
-            return redirect('users_dashboard')
+            return redirect('users:dashboard')
         else:
             messages.error(request, "Invalid email or password.")
-            return redirect('users_login')
+            return redirect('users:login')
 
     return render(request, "users_login.html")
-
 # -----------------------------
 # Blockchain interaction helpers
 # -----------------------------
-def add_certificate(cert_id):
-    """Add certificate ID to blockchain"""
-    try:
-        tx = contract.functions.addCertificate(cert_id).transact({'from': w3.eth.accounts[0]})
-        w3.eth.wait_for_transaction_receipt(tx)
-        return True
-    except Exception as e:
-        print("Error adding certificate to blockchain:", e)
-        return False
-
+def user_certificates(request):
+    # Filter certificates uploaded by the logged-in user
+    certificates = Certificate.objects.filter(uploaded_by=request.user)
+    return render(request, 'users/user_uload_certificates.html', {'certificates': certificates})
 def verify_certificate(cert_id):
     """Check if certificate ID exists on blockchain"""
     try:
@@ -175,55 +182,85 @@ def verify_certificate(cert_id):
 # -------------------------
 # User dashboard
 # -------------------------
-@login_required
+@login_required(login_url='users_login')
 def users_dashboard(request):
+    # Only fetch certificates uploaded by this user
     certificates = Certificate.objects.filter(user=request.user)
-
-    # Verify blockchain status for each certificate
+    
     certs_with_status = []
-    for cert in certificates:
-        # Push to blockchain if not already recorded
-        if not verify_certificate(cert.id):
-            add_certificate(cert.id)
 
-        blockchain_status = verify_certificate(cert.id)
+    for cert in certificates:
+        try:
+            # If certificate not yet recorded on blockchain, add it
+            if not verify_certificate(cert.id):
+                add_certificate_to_blockchain(cert.id)  # rename to a function that accepts cert.id
+
+            blockchain_status = verify_certificate(cert.id)
+        except Exception as e:
+            blockchain_status = f"Error: {e}"
+
         certs_with_status.append({
             'cert': cert,
             'blockchain_status': blockchain_status
         })
 
-    return render(request, "users_dashboard.html", {
-        'certificates': certs_with_status
-    })
-
-# -------------------------
+    return render(request, 'users_dashboard.html', {'certs_with_status': certs_with_status})
 # Upload certificate
 # -------------------------
-@login_required
-def upload_certificate(request):
-    # Initialize variable to avoid UnboundLocalError
-    blockchain_status = None
+@login_required(login_url='users_login')
+def user_upload_certificate(request):
+    message = None
+    certificate = None
 
     if request.method == "POST":
-        form = CertificateForm(request.POST, request.FILES)
+        form = UserCertificateUploadForm(request.POST, request.FILES)
         if form.is_valid():
             certificate = form.save(commit=False)
-            certificate.user = request.user
+            certificate.user = request.user  # Correct field name
+            certificate.save()  # Save to get ID
+
+            # SHA256 hash
+            file_obj = request.FILES['file']
+            file_content = file_obj.read()
+            certificate.file_hash = hashlib.sha256(file_content).hexdigest()
+
+            # Generate QR code
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=4,
+            )
+            verification_url = f"http://127.0.0.1:8080/verify/{certificate.file_hash}/"
+            qr.add_data(verification_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
+            certificate.qr_code.save(f"{certificate.name}_qr.png", File(buffer), save=False)
             certificate.save()
 
-            # Example: simulate blockchain addition
-            blockchain_status = "Certificate successfully added to blockchain!"
+            message = "✅ Certificate uploaded successfully!"
+
+            try:
+                user_certificates(certificate.id)
+            except Exception as e:
+                print("Blockchain error:", e)
         else:
-            blockchain_status = "Failed to upload certificate. Please check the form."
+            message = "❌ Failed to upload certificate."
     else:
-        form = CertificateForm()
+        form = UserCertificateUploadForm()
+
+    certificates = Certificate.objects.filter(user=request.user).order_by('-created_at')  # updated
+    if certificates.exists():
+        certificate = certificate or certificates.first()
 
     return render(request, "user_upload_certificate.html", {
         'form': form,
-        'blockchain_status': blockchain_status,
+        'certificate': certificate,
+        'message': message,
+        'certificates': certificates,
     })
-   
-# -------------------------
 # User logout
 # -------------------------
 @login_required(login_url='users_login')
@@ -232,3 +269,47 @@ def users_logout(request):
     messages.success(request, "You have been logged out successfully.")
     return redirect('home')
     
+def add_certificate_to_blockchain(cert_id):
+    cert = Certificate.objects.get(id=cert_id)
+    # Your blockchain logic: generate QR, hash, store on blockchain
+    return True  # or some status
+
+@login_required(login_url='users_login')
+def view_certificate(request, pk):
+    """
+    Allow a user to view a certificate only if it belongs to them.
+    """
+    cert = get_object_or_404(Certificate, pk=pk, user=request.user)
+    return render(request, 'user_portal/view_certificate.html', {'cert': cert})
+
+@login_required(login_url='users_login')
+def my_certificates(request):
+    certificates = UserProfile.objects.filter(uploaded_by=request.user).order_by('-created_at')
+    return render(request, 'users/my_certificates.html', {'certificates': certificates})
+
+@login_required(login_url='users_login')
+def blockchain_certificates(request):
+    certificates = []
+    try:
+        total = contract.functions.counter().call()  # total certificates on blockchain
+        for i in range(1, total + 1):
+            doc = contract.functions.getDocument(i).call()
+            # Only show certificates belonging to this user
+            if doc[2].lower() == request.user.email.lower():  # assuming owner stored as email
+                certificates.append({
+                    "id": i,
+                    "file_hash": doc[0],
+                    "timestamp": doc[1],
+                    "owner": doc[2],
+                })
+    except Exception as e:
+        print("Error fetching blockchain data:", e)
+
+    message = None
+    if not certificates:
+        message = "No certificates recorded on blockchain yet."
+
+    return render(request, "users/blockchain_certificates.html", {
+        "certificates": certificates,
+        "message": message
+    })

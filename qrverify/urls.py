@@ -6,27 +6,35 @@ from django.conf.urls.static import static
 
 urlpatterns = [
 
+    # DJANGO ADMIN PANEL
     path('admin/', admin.site.urls),
 
-    # HOME
+    # HOME PAGE
     path('', views.home, name='home'),
 
-    # ADMIN
+    # ADMIN AUTH
     path('admin-login/', views.admin_login, name='admin_login'),
     path('admin-logout/', views.admin_logout, name='admin_logout'),
-    path('admin-dashboard/', views.dashboard, name='dashboard'),
+
+    # ADMIN DASHBOARD
+    path('admin-dashboard/', views.admin_dashboard, name='admin_dashboard'),
 
     # USER DASHBOARD
-    path('dashboard/', views.users_dashboard, name='users_dashboard'),
+    path('users-dashboard/', views.users_dashboard, name='users_dashboard'),
 
-    # UPLOAD
-path('upload/', views.upload_certificate, name='upload_certificate'),  # match template    path('scan/', views.qr_scan, name='qr_scan'),
+    # CERTIFICATE UPLOAD
+    path('upload/', views.upload_certificate, name='upload_certificate'),
 
-    # VERIFY
+    # QR SCAN PAGE
+    path('scan/', views.qr_scan, name='qr_scan'),
+
+    # VERIFY CERTIFICATE
     path('verify/<str:file_hash>/', views.verify_certificate, name='qr_verify'),
 
     # USERS APP
     path('users/', include('users.urls')),
+    path('', include('certificate.urls')),  # important: include your app URLs
+
 
 ]
 

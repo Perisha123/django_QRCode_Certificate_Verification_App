@@ -126,10 +126,10 @@ STATICFILES_DIRS = [
 
 
 # MEDIA FILES (CERTIFICATES + QR CODES)
-
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA_URL = '/media/'
 
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
 # DEFAULT PRIMARY KEY
@@ -146,3 +146,6 @@ CONTRACT_ABI = []
 # LOGIN REDIRECTS
 LOGIN_URL = '/admin-login/'
 LOGIN_REDIRECT_URL = '/admin-dashboard/'
+
+USER_LOGIN_URL = '/users/login/'        # login page for normal users
+USER_LOGIN_REDIRECT_URL = '/users/access/'  # dashboard after login

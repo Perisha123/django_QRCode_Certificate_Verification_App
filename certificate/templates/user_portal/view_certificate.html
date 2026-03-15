@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Certificate Details</h2>
+    <hr>
+
+    <div class="card p-4">
+        <p><strong>Student Name:</strong> {{ cert.student_name }}</p>
+        <p><strong>Course Name:</strong> {{ cert.course_name }}</p>
+        <p><strong>Uploaded By:</strong> {{ cert.uploaded_by.username }}</p>
+        <p><strong>Uploaded At:</strong> {{ cert.created_at }}</p>
+
+        {% if cert.qr_code %}
+        <div class="my-3">
+            <label>QR Code:</label><br>
+            <img src="{{ cert.qr_code.url }}" alt="QR Code" width="150">
+        </div>
+        {% endif %}
+
+        <a href="{% url 'user_certificates' %}" class="btn btn-primary">Back to My Certificates</a>
+    </div>
+</div>
+{% endblock %}

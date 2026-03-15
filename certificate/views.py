@@ -1,8 +1,9 @@
 import hashlib
 import qrcode
 import os
-
-from django.shortcuts import render, redirect
+from io import BytesIO
+from django.core.files.base import ContentFile
+from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -10,9 +11,14 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.utils.crypto import get_random_string
 from qrcode.constants import ERROR_CORRECT_H
-
+from django.http import FileResponse
+from certificate.blockchain import user_certificates
+from django.http import HttpResponse
+from users.views import verify_certificate
+from certificate.models import Certificate
 from .models import Certificate
 from .forms import CertificateForm
+from certificate.blockchain import user_certificates, verify_certificate, add_certificate_to_blockchain
 from web3 import Web3  # Blockchain integration
 # --------------------------------------------------
 # CONNECT TO LOCAL BLOCKCHAIN (Ganache)
@@ -48,10 +54,10 @@ def admin_login(request):
 
         user = authenticate(request, username=username, password=password)
 
-        if user is not None and user.is_staff:
+        if user is not None and user.is_superuser:
             login(request, user)
             messages.success(request, "Welcome Admin!")
-            return redirect('dashboard')
+            return redirect('admin_dashboard')
 
         else:
             messages.error(request, "Invalid username or password")
@@ -76,7 +82,7 @@ def admin_logout(request):
 # ADMIN DASHBOARD
 
 @staff_member_required(login_url='admin_login')
-def dashboard(request):
+def admin_dashboard(request):
 
     certificates = Certificate.objects.order_by('-created_at')
 
@@ -93,7 +99,6 @@ def dashboard(request):
 @login_required(login_url='users_login')
 def upload_certificate(request):
 
-    # Initialize variables so they exist on GET requests
     show_qr = None
     blockchain_status = None
     blockchain_status_class = None
@@ -104,25 +109,28 @@ def upload_certificate(request):
         if form.is_valid():
             certificate = form.save(commit=False)
 
-            # Generate SHA256 hash
+            # SHA256 hash of uploaded file
             file_obj = request.FILES['file']
             file_data = file_obj.read()
             hash_value = hashlib.sha256(file_data).hexdigest()
             file_obj.seek(0)
             certificate.file_hash = hash_value
 
-            # Save uploaded user
+            # Uploaded by current user
             certificate.uploaded_by = request.user
+
+            # Assign to selected user
+            selected_user = form.cleaned_data.get('assigned_to')
+            if selected_user:
+                certificate.assigned_to = selected_user
+
+            # Save certificate first (needed for ImageField)
             certificate.save()
 
-            # Generate QR code
-            random_suffix = get_random_string(6)
-            filename = f"{hash_value}_{random_suffix}.png"
+            # -----------------------
+            # Generate QR code and save directly to ImageField
+            # -----------------------
             qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
-            qr_dir = os.path.join(settings.MEDIA_ROOT, "qr_codes")
-            os.makedirs(qr_dir, exist_ok=True)
-            qr_path = os.path.join(qr_dir, filename)
-
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=ERROR_CORRECT_H,
@@ -132,13 +140,21 @@ def upload_certificate(request):
             qr.add_data(qr_url)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
-            img.save(qr_path)
-            certificate.qr_code.name = f"qr_codes/{filename}"
+
+            # Save image into Django ImageField
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            random_suffix = get_random_string(6)
+            filename = f"{hash_value}_{random_suffix}.png"
+            certificate.qr_code.save(filename, ContentFile(buffer.getvalue()))
             certificate.save()
+            buffer.close()
 
             show_qr = certificate.qr_code.url
 
+            # -----------------------
             # Record on Blockchain
+            # -----------------------
             try:
                 tx_hash = w3.eth.send_transaction({
                     'from': default_account,
@@ -196,7 +212,7 @@ def verify_certificate(request, file_hash):
 @login_required(login_url='users_login')
 def users_dashboard(request):
 
-    certificates = Certificate.objects.filter(uploaded_by=request.user)
+    certificates = Certificate.objects.filter(user=request.user)
 
     return render(request, 'users_dashboard.html', {
         'certificates': certificates
@@ -216,3 +232,89 @@ def users_logout(request):
     messages.success(request, "You have logged out successfully.")
 
     return redirect('home')   # goes to user portal home page
+
+# ------------------------
+# Admin: List Certificates
+# ------------------------
+def admin_certificates(request):
+    certificates = Certificate.objects.all()
+    return render(request, 'admin_portal/certificates_list.html', {'certificates': certificates})
+
+# ------------------------
+# Admin: Edit Certificate
+# ------------------------
+def edit_certificate(request, pk):
+    cert = get_object_or_404(Certificate, pk=pk)
+    if request.method == 'POST':
+        form = CertificateForm(request.POST, request.FILES, instance=cert)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Certificate updated successfully!")
+            return redirect('upload_certificate')
+    else:
+        form = CertificateForm(instance=cert)
+    return render(request, 'admin_portal/edit_certificate.html', {'form': form})
+
+# ------------------------
+# Admin: Delete Certificate
+# ------------------------
+def delete_certificate(request, pk):
+    cert = get_object_or_404(Certificate, pk=pk)
+    cert.delete()
+    messages.success(request, "Certificate deleted successfully!")
+    return redirect('admin_dashboard')
+
+# ------------------------
+## ------------------------
+def verify_certificate_in_blockchain(cert_id):
+    """
+    Verifies if a certificate exists on the blockchain.
+    Returns True if verified, False otherwise.
+    """
+    try:
+        # Example: assuming you have contract and web3 set up
+        # Replace these with your actual contract setup
+        w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:7545'))  # Ganache or other provider
+        contract_address = '0xYourContractAddressHere'
+        abi = [...]  # your contract ABI
+        contract = w3.eth.contract(address=contract_address, abi=abi)
+
+        return contract.functions.verifyCertificate(cert_id).call()
+    except Exception as e:
+        print("Blockchain verification error:", e)
+        return False
+# User: View Certificate
+# ------------------------
+@login_required(login_url='users_login')
+def verify_certificate(request, file_hash):
+    certificates = Certificate.objects.filter(file_hash=file_hash, user=request.user)
+    certificate = certificates.latest('id')  # returns None if no match
+
+    if not certificate:
+        return HttpResponse("Certificate not found or not assigned to you.")
+
+    # Call the helper, not the view itself
+    blockchain_status = verify_certificate_in_blockchain(certificate.id)
+    return render(request, 'user_portal/verify_certificate.html', {
+        'certificate': certificate,
+        'blockchain_status': blockchain_status
+    })
+def user_upload_certificate(request):
+    if request.method == 'POST':
+        form = CertificateForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Certificate uploaded successfully!")
+            return redirect('home')
+    else:
+        form = CertificateForm()
+
+    return render(request, 'user_upload_certificate.html', {'form': form})
+
+def certificate_download(request, cert_id):
+    cert = get_object_or_404(Certificate, id=cert_id)
+
+    file_path = cert.certificate_file.path  # change if your field name is different
+
+    if os.path.exists(file_path):
+        return FileResponse(open(file_path, 'rb'), as_attachment=True)

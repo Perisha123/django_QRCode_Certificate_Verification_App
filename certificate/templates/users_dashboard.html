@@ -11,7 +11,7 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="#">Certificate Portal</a>
-        <form action="{% url 'users_logout' %}" method="POST" class="d-flex">
+        <form action="{% url 'users:users_logout' %}" method="POST" class="d-flex">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">Logout</button>
         </form>
@@ -23,43 +23,53 @@
 
     <div class="row mb-4">
         <div class="col-md-3 mb-2">
-            <a href="{% url 'user_upload_certificate' %}" class="btn btn-success w-100">⬆️ Upload Certificate</a>
+            <a href="{% url 'users:user_upload_certificate' %}" class="btn btn-success w-100">⬆️ Upload Certificate</a>
         </div>
         <div class="col-md-3 mb-2">
             <a href="{% url 'qr_scan' %}" class="btn btn-warning w-100">📱 Scan QR Code</a>
         </div>
-        <a href="{% url 'blockchain_certificates' %}" class="btn btn-success">View Blockchain Certificates</a>
+        <div class="col-md-3 mb-2">
+            <a href="{% url 'users:dashboard' %}" class="btn btn-info w-100">📂 My Certificates</a>
+        </div>
+        <div class="col-md-3 mb-2">
+            <a href="{% url 'users:blockchain_certificates' %}" class="btn btn-primary w-100">🛠️ View Blockchain Certificates</a>
+        </div>
     </div>
 
     <hr>
 
     <h4 class="mt-4 mb-3">Your Uploaded Certificates</h4>
-<div class="row">
-    {% for cert in certificates %}
-        <div class="col-md-4 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-body">
-                    <h5 class="card-title">{{ cert.name }}</h5>
-                    <p class="text-muted">Uploaded: {{ cert.created_at|date:"M d, Y H:i" }}</p>
+    <div class="row">
+        {% for item in certs_with_status %}
+            {% with cert=item.cert %}
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ cert.name }}</h5>
+                            <p class="text-muted">Uploaded: {{ cert.created_at|date:"M d, Y H:i" }}</p>
+                            <p class="text-muted">Blockchain: {{ item.blockchain_status }}</p>
 
-                    {% if cert.file_hash %}
-                        <a href="{% url 'qr_verify' cert.file_hash %}" class="btn btn-info w-100 mb-2">🔎 Verify Certificate</a>
-                    {% else %}
-                        <button class="btn btn-secondary w-100 mb-2" disabled>❌ Verification Not Available</button>
-                    {% endif %}
+                            {% if cert.file_hash %}
+                                <a href="{% url 'qr_verify' cert.file_hash %}" class="btn btn-info w-100 mb-2">🔎 Verify Certificate</a>
+                            {% else %}
+                                <button class="btn btn-secondary w-100 mb-2" disabled>❌ Verification Not Available</button>
+                            {% endif %}
 
-                    {% if cert.qr_code %}
-                        <img src="{{ cert.qr_code.url }}" class="img-fluid mt-2">
-                    {% endif %}
+                            {% if cert.qr_code %}
+                                <img src="{{ cert.qr_code.url }}" class="img-fluid mt-2">
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
+            {% endwith %}
+        {% empty %}
+            <div class="col-12">
+                <div class="alert alert-secondary">You have not uploaded any certificates yet.</div>
             </div>
-        </div>
-    {% empty %}
-        <div class="col-12">
-            <div class="alert alert-secondary">You have not uploaded any certificates yet.</div>
-        </div>
-    {% endfor %}
+        {% endfor %}
+    </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
