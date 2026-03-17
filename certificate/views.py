@@ -120,7 +120,7 @@ def upload_certificate(request):
             certificate.uploaded_by = request.user
 
             # Assign to selected user
-            selected_user = form.cleaned_data.get('assigned_to')
+            selected_user = form.cleaned_data.get('user')
             if selected_user:
                 certificate.assigned_to = selected_user
 
@@ -179,7 +179,7 @@ def upload_certificate(request):
     else:
         form = CertificateForm()
 
-    return render(request, 'user_upload_certificate.html', {
+    return render(request, 'upload_certificate.html', {
         'form': form,
         'show_qr': show_qr,
         'qr_filename': filename if show_qr else None,
@@ -275,7 +275,7 @@ def verify_certificate_in_blockchain(cert_id):
         # Example: assuming you have contract and web3 set up
         # Replace these with your actual contract setup
         w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:7545'))  # Ganache or other provider
-        contract_address = '0xYourContractAddressHere'
+        contract_address = '0xcccFa4ad2999677add15ee96486d3839F4b66aBd'
         abi = [...]  # your contract ABI
         contract = w3.eth.contract(address=contract_address, abi=abi)
 
@@ -300,6 +300,11 @@ def verify_certificate(request, file_hash):
         'blockchain_status': blockchain_status
     })
 def user_upload_certificate(request):
+     # Only allow admin
+    if not request.user.is_superuser:
+        messages.error(request, "This page is only for admin purposes.")
+        return redirect('users:dashboard')  # redirect normal users
+
     if request.method == 'POST':
         form = CertificateForm(request.POST, request.FILES)
         if form.is_valid():
@@ -318,3 +323,15 @@ def certificate_download(request, cert_id):
 
     if os.path.exists(file_path):
         return FileResponse(open(file_path, 'rb'), as_attachment=True)
+
+from django.contrib.auth.models import User
+
+@login_required(login_url='users_login')
+def my_certificates(request):
+    # Only certificates uploaded by admin and assigned to this user
+    certificates = Certificate.objects.filter(
+        uploaded_by__is_staff=True,  # uploaded by admin
+        assigned_to=request.user      # assigned to current user
+    ).order_by('-created_at')
+
+    return render(request, 'users/my_certificates.html', {'certificates': certificates})

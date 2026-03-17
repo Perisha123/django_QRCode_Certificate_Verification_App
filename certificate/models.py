@@ -9,6 +9,8 @@ class Certificate(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
+    assigned_to = models.ManyToManyField(User, related_name='assigned_certificates', blank=True)
+
 
     # uploaded certificate file
     file = models.FileField(upload_to='certificates/', blank=True, null=True)

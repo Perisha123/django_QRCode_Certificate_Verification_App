@@ -15,8 +15,8 @@
     <tbody>
     {% for cert in certificates %}
         <tr>
-            <td>{{ cert.title }}</td>
-            <td>{{ cert.uploaded_by.email }}</td>
+            <td>{{ cert.name }}</td>
+            <td>{{ cert.user.email }}</td>
             <td>{{ cert.created_at|date:"d M Y" }}</td>
             <td>
                 <a href="{% url 'view_certificate' cert.pk %}" class="btn btn-sm btn-primary">View</a>
@@ -27,7 +27,7 @@
     </tbody>
 </table>
 {% else %}
-<p>You have not uploaded any certificates yet.</p>
+<p>You have no certificates assigned to you.</p>
 {% endif %}
 
 {% endblock %}

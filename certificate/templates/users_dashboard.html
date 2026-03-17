@@ -21,9 +21,14 @@
 <div class="container mt-5">
     <h2 class="mb-4">Welcome, {{ request.user.first_name }}</h2>
 
+    <!-- Top Buttons -->
     <div class="row mb-4">
         <div class="col-md-3 mb-2">
-            <a href="{% url 'users:user_upload_certificate' %}" class="btn btn-success w-100">⬆️ Upload Certificate</a>
+            {% if request.user.is_superuser %}
+                <a href="{% url 'users:user_upload_certificate' %}" class="btn btn-success w-100">⬆️ Upload Certificate</a>
+            {% else %}
+                <button class="btn btn-success w-100" disabled>⬆️ Upload Certificate (Admin Only)</button>
+            {% endif %}
         </div>
         <div class="col-md-3 mb-2">
             <a href="{% url 'qr_scan' %}" class="btn btn-warning w-100">📱 Scan QR Code</a>
@@ -36,18 +41,38 @@
         </div>
     </div>
 
+    <!-- Messages -->
+    {% if messages %}
+        <div class="container mt-3">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     <hr>
 
+    <!-- Certificate List -->
     <h4 class="mt-4 mb-3">Your Uploaded Certificates</h4>
     <div class="row">
-        {% for item in certs_with_status %}
-            {% with cert=item.cert %}
+        {% if certificates %}
+            {% for cert in certificates %}
                 <div class="col-md-4 mb-4">
                     <div class="card shadow-sm h-100">
                         <div class="card-body">
                             <h5 class="card-title">{{ cert.name }}</h5>
                             <p class="text-muted">Uploaded: {{ cert.created_at|date:"M d, Y H:i" }}</p>
-                            <p class="text-muted">Blockchain: {{ item.blockchain_status }}</p>
+                            <p class="text-muted">
+                                Blockchain: 
+                                {% if cert.blockchain_status %}
+                                    {{ cert.blockchain_status }}
+                                {% else %}
+                                    Not recorded
+                                {% endif %}
+                            </p>
 
                             {% if cert.file_hash %}
                                 <a href="{% url 'qr_verify' cert.file_hash %}" class="btn btn-info w-100 mb-2">🔎 Verify Certificate</a>
@@ -61,12 +86,12 @@
                         </div>
                     </div>
                 </div>
-            {% endwith %}
-        {% empty %}
+            {% endfor %}
+        {% else %}
             <div class="col-12">
                 <div class="alert alert-secondary">You have not uploaded any certificates yet.</div>
             </div>
-        {% endfor %}
+        {% endif %}
     </div>
 </div>
 

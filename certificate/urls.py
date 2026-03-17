@@ -30,6 +30,7 @@ urlpatterns = [
     # User logout
     path('logout/', views.users_logout, name='logout'),
     path('view/<int:pk>/', view_certificate, name='view_certificate'),
+    path('my-certificates/', views.my_certificates, name='my_certificates'),
 
     # QR scan
     path('scan/', views.qr_scan, name='qr_scan'),

@@ -7,6 +7,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 import hashlib
 import qrcode
+from certificate.blockchain import user_certificates
 from .models import UserProfile
 from io import BytesIO
 from django.core.files import File
@@ -212,11 +213,17 @@ def user_upload_certificate(request):
     message = None
     certificate = None
 
+     # Check if user is admin
+    if not request.user.is_superuser:
+        messages.error(request, "This page is only for admin purposes.")
+        return redirect('users:dashboard')  # or any page in user portal
+
+
     if request.method == "POST":
         form = UserCertificateUploadForm(request.POST, request.FILES)
         if form.is_valid():
             certificate = form.save(commit=False)
-            certificate.user = request.user  # Correct field name
+            certificate.assigned_to = request.user  # Correct field name
             certificate.save()  # Save to get ID
 
             # SHA256 hash
@@ -284,7 +291,7 @@ def view_certificate(request, pk):
 
 @login_required(login_url='users_login')
 def my_certificates(request):
-    certificates = UserProfile.objects.filter(uploaded_by=request.user).order_by('-created_at')
+    certificates = UserProfile.objects.filter(user=request.user).order_by('-created_at')
     return render(request, 'users/my_certificates.html', {'certificates': certificates})
 
 @login_required(login_url='users_login')
