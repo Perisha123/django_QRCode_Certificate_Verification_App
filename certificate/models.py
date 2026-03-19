@@ -1,17 +1,30 @@
 import hashlib
 from django.db import models
 from django.utils import timezone
-from django.contrib.auth.models import User 
-
+from django.contrib.auth.models import User
 
 
 class Certificate(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    assigned_to = models.ManyToManyField(User, related_name='assigned_certificates', blank=True)
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='assigned_certificates'
+    )
+    uploaded_by_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='certificates_uploaded_by',
+        null=True,
+        blank=True
+    )
 
-
+    is_user_uploaded = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False)
     # uploaded certificate file
     file = models.FileField(upload_to='certificates/', blank=True, null=True)
 
@@ -23,6 +36,7 @@ class Certificate(models.Model):
 
     # timestamp
     created_at = models.DateTimeField(default=timezone.now)
+
     def save(self, *args, **kwargs):
         # Generate SHA256 hash if file exists and file_hash is empty
         if self.file and not self.file_hash:

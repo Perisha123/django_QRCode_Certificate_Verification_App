@@ -7,7 +7,6 @@ from django.core.mail import send_mail
 from django.conf import settings
 import hashlib
 import qrcode
-from certificate.blockchain import user_certificates
 from .models import UserProfile
 from io import BytesIO
 from django.core.files import File
@@ -183,29 +182,30 @@ def verify_certificate(cert_id):
 # -------------------------
 # User dashboard
 # -------------------------
+from django.db.models import Q
+
 @login_required(login_url='users_login')
 def users_dashboard(request):
-    # Only fetch certificates uploaded by this user
-    certificates = Certificate.objects.filter(user=request.user)
-    
+    # Certificates uploaded by the user OR assigned to the user
+    user_certificates = Certificate.objects.filter(
+        Q(uploaded_by_user=True, assigned_to=request.user) | Q(assigned_to=request.user) | Q(uploaded_by_user=True, assigned_to__isnull=True)
+    ).order_by('-created_at')
+
+    # Prepare list with blockchain status
     certs_with_status = []
+    for cert in user_certificates:
+        source = "You" if cert.uploaded_by_user == request.user else "Admin Assigned"
 
-    for cert in certificates:
-        try:
-            # If certificate not yet recorded on blockchain, add it
-            if not verify_certificate(cert.id):
-                add_certificate_to_blockchain(cert.id)  # rename to a function that accepts cert.id
-
-            blockchain_status = verify_certificate(cert.id)
-        except Exception as e:
-            blockchain_status = f"Error: {e}"
-
+        blockchain_status = "Recorded on Blockchain" if cert.file_hash else "Not recorded"
         certs_with_status.append({
             'cert': cert,
             'blockchain_status': blockchain_status
         })
 
-    return render(request, 'users_dashboard.html', {'certs_with_status': certs_with_status})
+    return render(request, 'users_dashboard.html', {
+        'certs_with_status': certs_with_status
+    })
+
 # Upload certificate
 # -------------------------
 @login_required(login_url='users_login')
@@ -213,18 +213,14 @@ def user_upload_certificate(request):
     message = None
     certificate = None
 
-     # Check if user is admin
-    if not request.user.is_superuser:
-        messages.error(request, "This page is only for admin purposes.")
-        return redirect('users:dashboard')  # or any page in user portal
-
-
     if request.method == "POST":
         form = UserCertificateUploadForm(request.POST, request.FILES)
         if form.is_valid():
             certificate = form.save(commit=False)
-            certificate.assigned_to = request.user  # Correct field name
-            certificate.save()  # Save to get ID
+            certificate.uploaded_by_user = True
+            certificate.is_user_uploaded = True
+            certificate.assigned_to = request.user
+            certificate.save()
 
             # SHA256 hash
             file_obj = request.FILES['file']
@@ -248,25 +244,17 @@ def user_upload_certificate(request):
             certificate.save()
 
             message = "✅ Certificate uploaded successfully!"
-
-            try:
-                user_certificates(certificate.id)
-            except Exception as e:
-                print("Blockchain error:", e)
-        else:
-            message = "❌ Failed to upload certificate."
+            return redirect('users:dashboard')
     else:
         form = UserCertificateUploadForm()
 
-    certificates = Certificate.objects.filter(user=request.user).order_by('-created_at')  # updated
-    if certificates.exists():
-        certificate = certificate or certificates.first()
+    # Only fetch the latest certificate uploaded by this user
+    latest_certificate = Certificate.objects.filter(uploaded_by_user=request.user).order_by('-created_at').first()
 
     return render(request, "user_upload_certificate.html", {
         'form': form,
-        'certificate': certificate,
+        'certificate': latest_certificate,
         'message': message,
-        'certificates': certificates,
     })
 # User logout
 # -------------------------
@@ -289,10 +277,6 @@ def view_certificate(request, pk):
     cert = get_object_or_404(Certificate, pk=pk, user=request.user)
     return render(request, 'user_portal/view_certificate.html', {'cert': cert})
 
-@login_required(login_url='users_login')
-def my_certificates(request):
-    certificates = UserProfile.objects.filter(user=request.user).order_by('-created_at')
-    return render(request, 'users/my_certificates.html', {'certificates': certificates})
 
 @login_required(login_url='users_login')
 def blockchain_certificates(request):

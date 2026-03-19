@@ -24,5 +24,4 @@ urlpatterns = [
 
     # Logout and redirect to portal home page
     path('logout/', LogoutView.as_view(next_page='home'), name='users_logout'),
-    path('my_certificates/', views.my_certificates, name='my_certificates'),
 ]

@@ -27,10 +27,9 @@ urlpatterns = [
 
     # QR SCAN PAGE
     path('scan/', views.qr_scan, name='qr_scan'),
-    path('my-certificates/', views.my_certificates, name='my_certificates'),
-   
+
     # VERIFY CERTIFICATE
-    path('verify/<str:file_hash>/', views.verify_certificate, name='qr_verify'),
+    path('verify/<int:cert_id>/', views.verify_certificate, name='qr_verify'),
 
     # USERS APP
     path('users/', include('users.urls')),

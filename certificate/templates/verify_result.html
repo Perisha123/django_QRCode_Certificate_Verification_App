@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5 text-center">
+    <h2>{{ status }}</h2>
+
+    {% if certificate %}
+        <ul class="list-group mt-3 d-inline-block text-start">
+            <li class="list-group-item"><strong>Certificate Name:</strong> {{ certificate.name }}</li>
+            <li class="list-group-item"><strong>Issued By:</strong> {{ certificate.issued_by }}</li>
+            <li class="list-group-item"><strong>Issue Date:</strong> {{ certificate.issue_date }}</li>
+            <li class="list-group-item"><strong>Hash:</strong> {{ certificate.file_hash }}</li>
+        </ul>
+
+        <div class="mt-4">
+            <h4>QR Code</h4>
+            <img src="{{ certificate.qr_code.url }}" width="200">
+        </div>
+    {% else %}
+        <p class="text-danger mt-3">Certificate could not be verified.</p>
+    {% endif %}
+
+    <a href="{% url 'users:dashboard' %}" class="btn btn-primary mt-4">Back to Dashboard</a>
+</div>
+{% endblock %}

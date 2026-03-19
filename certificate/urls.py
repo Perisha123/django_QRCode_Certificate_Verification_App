@@ -21,7 +21,7 @@ urlpatterns = [
     path('user_upload/', views.user_upload_certificate, name='user_upload_certificate'),
 
     # Verify certificate
-    path('verify/<str:file_hash>/', views.verify_certificate, name='qr_verify'),
+    path('verify/<int:cert_id>/', views.verify_certificate, name='verify_certificate'),
 
 
     # Certificate download
@@ -30,7 +30,6 @@ urlpatterns = [
     # User logout
     path('logout/', views.users_logout, name='logout'),
     path('view/<int:pk>/', view_certificate, name='view_certificate'),
-    path('my-certificates/', views.my_certificates, name='my_certificates'),
 
     # QR scan
     path('scan/', views.qr_scan, name='qr_scan'),
