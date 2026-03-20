@@ -15,14 +15,13 @@ from django.utils.crypto import get_random_string
 from qrcode.constants import ERROR_CORRECT_H
 from django.contrib.auth.models import User
 from django.http import FileResponse
-from certificate.blockchain import user_certificates
 from django.http import HttpResponse
 from users.views import verify_certificate
 from certificate.models import Certificate
 from .models import Certificate
 # at the top of certificate/views.py
 from .forms import CertificateForm
-from certificate.blockchain import user_certificates, verify_certificate, add_certificate_to_blockchain
+from certificate.blockchain import  verify_certificate, add_certificate_to_blockchain
 from web3 import Web3  # Blockchain integration
 # --------------------------------------------------
 # CONNECT TO LOCAL BLOCKCHAIN (Ganache)
@@ -104,10 +103,6 @@ def admin_dashboard(request):
 # UPLOAD CERTIFICATE (User + Blockchain)
 @login_required(login_url='users_login')
 def upload_certificate(request):
-    show_qr = None
-    blockchain_status = None
-    blockchain_status_class = None
-
     if request.method == "POST":
         form = CertificateForm(request.POST, request.FILES)
 
@@ -117,25 +112,25 @@ def upload_certificate(request):
             if not file_data:
                 messages.error(request, "Uploaded file is empty.")
                 return redirect('upload_certificate')
-
             file_obj.seek(0)
             hash_value = hashlib.sha256(file_data).hexdigest()
 
-            # Get the selected user (can be None)
-            user = form.cleaned_data.get('assigned_to')
+            # --- Get the actual user by email ---
+            user_email = form.cleaned_data.get('email')
+            assigned_user = User.objects.filter(email=user_email).first()  # None if not registered
 
-            # Create certificate
+            # --- Create certificate ---
             certificate = Certificate.objects.create(
                 name=form.cleaned_data['name'],
-                email=user.email if user else form.cleaned_data['email'],  # <-- set email here
-
+                email=assigned_user.email if assigned_user else form.cleaned_data['email'],  # <-- your line
                 file=file_obj,
-                uploaded_by_user=request.user,  # admin
-                assigned_to=user,               # can be None
+                uploaded_by_user=None,        # admin upload
+                is_user_uploaded=False,
+                assigned_to=assigned_user,    # correctly assign user object or None
                 file_hash=hash_value
             )
 
-            # Generate QR code
+            # --- Generate QR code ---
             qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
             qr = qrcode.QRCode(
                 version=1,
@@ -148,40 +143,45 @@ def upload_certificate(request):
             img = qr.make_image(fill_color="black", back_color="white")
             buffer = BytesIO()
             img.save(buffer, format="PNG")
-
-            # Save QR code
             filename = f"{hash_value}_{get_random_string(4)}.png"
             certificate.qr_code.save(filename, ContentFile(buffer.getvalue()))
             certificate.save()
             buffer.close()
+
+            # --- Store on Blockchain ---
+            try:
+                w3, contract = get_blockchain_connection()  # should return w3 and contract
+                tx_hash = contract.functions.storeCertificate(
+                    certificate.id,
+                    certificate.file_hash
+                ).transact({'from': w3.eth.accounts[0]})
+                w3.eth.wait_for_transaction_receipt(tx_hash)
+                messages.success(request, "Certificate recorded on blockchain!")
+            except Exception as e:
+                messages.warning(request, f"Certificate uploaded, but blockchain recording failed: {e}")
+
+            if not assigned_user:
+                messages.warning(request, f"No registered user with email '{user_email}'. Certificate unassigned.")
 
             messages.success(request, "Certificate uploaded successfully!")
             return redirect('admin_dashboard')
     else:
         form = CertificateForm()
 
-    return render(request, 'upload_certificate.html', {
-        'form': form,
-        'show_qr': show_qr,
-        'blockchain_status': blockchain_status,
-        'blockchain_status_class': blockchain_status_class,
-    })
-#----------------
+    return render(request, 'upload_certificate.html', {'form': form})
 
 # --------------------------------------------------
 # USER DASHBOARD
-
+from django.db.models import Q
 @login_required(login_url='users_login')
 def users_dashboard(request):
-
     certificates = Certificate.objects.filter(
-    assigned_to=request.user,
-    is_user_uploaded=True
-)
-
+        Q(assigned_to=request.user) | Q(uploaded_by_user=request.user)
+    )
     return render(request, 'users_dashboard.html', {
         'certificates': certificates
     })
+
 
 @login_required(login_url='users_login')
 def qr_scan(request):
@@ -239,9 +239,9 @@ def verify_certificate_in_blockchain(cert_id):
     try:
         # Example: assuming you have contract and web3 set up
         # Replace these with your actual contract setup
-        w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:7545'))  # Ganache or other provider
-        contract_address = '0xYourContractAddressHere'
-        abi = [...]  # your contract ABI
+        w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:8545'))  # Ganache or other provider
+        contract_address = '0xDC2A8e12C90eBf6DD54f51772B451E53159649b7'
+        abi = ["blockchain/contract/DocumentVerification.json"]  # your contract ABI
         contract = w3.eth.contract(address=contract_address, abi=abi)
 
         return contract.functions.verifyCertificate(cert_id).call()
@@ -250,19 +250,34 @@ def verify_certificate_in_blockchain(cert_id):
         return False
 # User: View Certificate
 # ------------------------
+@login_required(login_url='users_login')
 def verify_certificate(request, cert_id):
-    certificate = Certificate.objects.get(id=cert_id)
-    try:
-        blockchain_hash = contract.functions.getCertificate(cert_id).call()
-        verified = blockchain_hash == certificate.sha256_hash
-    except:
-        verified = False
+    """
+    Display certificate and verify its hash on the blockchain.
+    """
+    certificate = get_object_or_404(Certificate, id=cert_id)
+    verified = False
 
-    context = {
+    try:
+        # Connect to blockchain
+        w3, contract = get_blockchain_connection()
+        account_address = w3.eth.accounts[0]  # Ganache account
+
+        # Send transaction to record verification
+        tx_hash = contract.functions.verifyCertificate(cert_id).transact({'from': account_address})
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        # Read hash from blockchain to confirm
+        blockchain_hash = contract.functions.getCertificate(cert_id).call()
+        verified = blockchain_hash == certificate.file_hash
+
+    except Exception as e:
+        messages.warning(request, f"Blockchain verification failed: {e}")
+
+    return render(request, "user_portal/verify_certificate.html", {
         'certificate': certificate,
         'verified': verified
-    }
-    return render(request, 'user_portal/verify_certificate.html', context)
+    })
 
 from .blockchain import get_blockchain_connection
 

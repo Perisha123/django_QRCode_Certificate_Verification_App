@@ -2,23 +2,29 @@
 
 {% block content %}
 <div class="container mt-5">
-    <h2>Certificate Details</h2>
+    <h2>Blockchain Certificates</h2>
     <hr>
 
-    <div class="card p-4">
-        <p><strong>Student Name:</strong> {{ cert.student_name }}</p>
-        <p><strong>Course Name:</strong> {{ cert.course_name }}</p>
-        <p><strong>Uploaded By:</strong> {{ cert.uploaded_by.username }}</p>
-        <p><strong>Uploaded At:</strong> {{ cert.created_at }}</p>
+    {% if certs %}
+        {% for cert in certs %}
+            <div class="card p-4 mb-3">
+                <p><strong>ID:</strong> {{ cert.id }}</p>
+                <p><strong>File Hash:</strong> {{ cert.file_hash }}</p>
+                <p><strong>Owner:</strong> {{ cert.owner }}</p>
+                <p><strong>Timestamp:</strong> {{ cert.timestamp }}</p>
 
-        {% if cert.qr_code %}
-        <div class="my-3">
-            <label>QR Code:</label><br>
-            <img src="{{ cert.qr_code.url }}" alt="QR Code" width="150">
-        </div>
-        {% endif %}
+                {% if cert.qr_code %}
+                    <div class="my-3">
+                        <label>QR Code:</label><br>
+                        <img src="{{ cert.qr_code.url }}" alt="QR Code" width="150">
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No blockchain certificates found.</p>
+    {% endif %}
 
-        <a href="{% url 'user_certificates' %}" class="btn btn-primary">Back to My Certificates</a>
-    </div>
+    <a href="{% url 'user_certificates' %}" class="btn btn-primary mt-3">Back to My Certificates</a>
 </div>
 {% endblock %}

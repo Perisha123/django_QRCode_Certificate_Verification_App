@@ -20,36 +20,7 @@
         {% csrf_token %}
         {{ form.as_p }}
         <button type="submit" class="btn btn-success">Upload</button>
-
-        <!-- Dynamic Back to Dashboard button -->
-        {% if request.user.is_superuser %}
-            <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
-        {% else %}
-            <a href="{% url 'users_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
-        {% endif %}
     </form>
-
-
-    <!-- Display QR code and blockchain info of the last uploaded certificate -->
-    {% if certificate %}
-        <hr>
-        <h5>QR Code Generated:</h5>
-        <img src="{{ certificate.qr_code.url }}" class="img-fluid" alt="QR Code">
-
-        <p class="mt-2">
-            Verification Link: 
-            <a href="http://127.0.0.1:8080/verify/{{ certificate.file_hash }}/" target="_blank">
-                Verify Certificate
-            </a>
-        </p>
-
-        {% if blockchain_status %}
-            <div class="mt-3 p-2 {{ blockchain_status_class }}">
-                <strong>Blockchain Status:</strong> {{ blockchain_status }}
-            </div>
-        {% endif %}
-    {% endif %}
-
 
 </div>
 </body>

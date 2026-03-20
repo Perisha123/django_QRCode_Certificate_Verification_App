@@ -10,6 +10,7 @@ class UserProfile(models.Model):
     file_hash = models.CharField(max_length=64, blank=True, null=True)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    owner = models.CharField(max_length=42, default='0x0000000000000000000000000000000000000000')
 
     def __str__(self):
         return f"{self.title} ({self.uploaded_by.email})"

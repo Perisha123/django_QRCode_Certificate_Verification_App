@@ -7,6 +7,8 @@ from django.core.mail import send_mail
 from django.conf import settings
 import hashlib
 import qrcode
+
+from users.blockchain_utils import push_certificates_to_blockchain
 from .models import UserProfile
 from io import BytesIO
 from django.core.files import File
@@ -18,12 +20,14 @@ from django.utils.crypto import get_random_string
 from qrcode.constants import ERROR_CORRECT_H
 from web3 import Web3
 from django.conf import settings
-from certificate.blockchain import user_certificates, verify_certificate, add_certificate_to_blockchain
+from certificate.blockchain import verify_certificate, add_certificate_to_blockchain
 
 # Import Certificate model and form
 from certificate.models import Certificate
 from certificate.forms import CertificateForm
 from users.forms import UserCertificateUploadForm
+from .blockchain_utils import push_certificates_to_blockchain
+
 
 # Connect to Ganache
 # -----------------------------
@@ -37,7 +41,7 @@ else:
 # -----------------------------
 # Load deployed contract ABI and bytecode
 # -----------------------------
-CONTRACT_ADDRESS = "0x2c61d671Dd1DbD60eB57672491E898f79Bf64ff0"  # Replace with your deployed contract
+CONTRACT_ADDRESS = "0xDC2A8e12C90eBf6DD54f51772B451E53159649b7"  # Replace with your deployed contract
 
 contract_path = os.path.join(
     settings.BASE_DIR,
@@ -63,23 +67,43 @@ print("Contract loaded successfully!")
 # -----------------------------
 # View blockchain certificates
 # -----------------------------
-def view_certificates_blockchain(request):
-    certificates = []
-    try:
-        total = contract.functions.counter().call()  # Get total stored documents
-        for i in range(1, total + 1):
-            doc = contract.functions.getDocument(i).call()
-            certificates.append({
-                "id": i,
-                "file_hash": doc[0],
-                "timestamp": doc[1],
-                "owner": doc[2],
-            })
-    except Exception as e:
-        print("Error fetching blockchain data:", e)
+from django.shortcuts import render
+from .blockchain_setup import contract
+from qrverify.settings import CONTRACT_ABI, CONTRACT_ADDRESS
 
-    return render(request, "users/blockchain_certificates.html", {"certificates": certificates})
-# -------------------------
+
+@login_required(login_url='users_login')
+def view_certificates_blockchain(request):
+    w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
+    contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
+
+    certificates = Certificate.objects.filter(
+        uploaded_by_user=request.user
+    ) | Certificate.objects.filter(
+        assigned_to=request.user
+    )
+    certificates = certificates.distinct()    
+    blockchain_data = []
+
+    for cert in certificates:
+        try:
+            owner = contract.functions.getCertificateOwner(cert.id).call()
+            hash_on_chain = contract.functions.getCertificate(cert.id).call()
+            verified = hash_on_chain == cert.file_hash
+        except Exception as e:
+            owner = "Error"
+            verified = False
+
+        blockchain_data.append({
+            "name": cert.name,
+            "hash": cert.file_hash,
+            "owner": owner,
+            "verified": verified
+        })
+
+    context = {"certificates": blockchain_data}
+    return render(request, "users/blockchain_certificates.html", context)
+
 # User access page (Login/Register selection)
 # -------------------------
 def users_access(request):
@@ -186,21 +210,25 @@ from django.db.models import Q
 
 @login_required(login_url='users_login')
 def users_dashboard(request):
-    # Certificates uploaded by the user OR assigned to the user
+    # Fetch all certificates uploaded by or assigned to this user
     user_certificates = Certificate.objects.filter(
-        Q(uploaded_by_user=True, assigned_to=request.user) | Q(assigned_to=request.user) | Q(uploaded_by_user=True, assigned_to__isnull=True)
+        Q(uploaded_by_user=request.user) | Q(assigned_to=request.user)
     ).order_by('-created_at')
 
-    # Prepare list with blockchain status
+    # Debugging: see what is fetched
+    print(f"DEBUG - Certificates for user {request.user.id} ({request.user.email}): {user_certificates}")
+
+    # Prepare template context
     certs_with_status = []
     for cert in user_certificates:
-        source = "You" if cert.uploaded_by_user == request.user else "Admin Assigned"
-
-        blockchain_status = "Recorded on Blockchain" if cert.file_hash else "Not recorded"
         certs_with_status.append({
             'cert': cert,
-            'blockchain_status': blockchain_status
+            'source': "You" if cert.uploaded_by_user_id == request.user.id else "Admin Assigned",
+            'blockchain_status': "Recorded on Blockchain" if cert.file_hash else "Not recorded"
         })
+
+    if not certs_with_status:
+        print("DEBUG - No certificates to show for this user!")
 
     return render(request, 'users_dashboard.html', {
         'certs_with_status': certs_with_status
@@ -208,6 +236,7 @@ def users_dashboard(request):
 
 # Upload certificate
 # -------------------------
+from .blockchain_setup import contract 
 @login_required(login_url='users_login')
 def user_upload_certificate(request):
     message = None
@@ -217,7 +246,7 @@ def user_upload_certificate(request):
         form = UserCertificateUploadForm(request.POST, request.FILES)
         if form.is_valid():
             certificate = form.save(commit=False)
-            certificate.uploaded_by_user = True
+            certificate.uploaded_by_user = request.user
             certificate.is_user_uploaded = True
             certificate.assigned_to = request.user
             certificate.save()
@@ -226,6 +255,20 @@ def user_upload_certificate(request):
             file_obj = request.FILES['file']
             file_content = file_obj.read()
             certificate.file_hash = hashlib.sha256(file_content).hexdigest()
+            certificate.save()
+
+            # ✅ ADD THIS BLOCKCHAIN CODE 👇
+            try:
+                tx = contract.functions.storeCertificate(
+                    certificate.id,
+                    certificate.file_hash
+                ).transact({'from': w3.eth.accounts[0]})
+
+                w3.eth.wait_for_transaction_receipt(tx)
+                print("Stored on blockchain ✅")
+
+            except Exception as e:
+                print("Blockchain error:", e)
 
             # Generate QR code
             qr = qrcode.QRCode(
@@ -248,8 +291,9 @@ def user_upload_certificate(request):
     else:
         form = UserCertificateUploadForm()
 
-    # Only fetch the latest certificate uploaded by this user
-    latest_certificate = Certificate.objects.filter(uploaded_by_user=request.user).order_by('-created_at').first()
+    latest_certificate = Certificate.objects.filter(
+        uploaded_by_user=request.user
+    ).order_by('-created_at').first()
 
     return render(request, "user_upload_certificate.html", {
         'form': form,
