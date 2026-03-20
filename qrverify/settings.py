@@ -1,3 +1,4 @@
+
 """
 Django settings for qrverify project.
 """
@@ -139,7 +140,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # BLOCKCHAIN SETTINGS (for later)
 
-CONTRACT_ADDRESS = ""
+CONTRACT_ADDRESS = "0xDC2A8e12C90eBf6DD54f51772B451E53159649b7"
 
 CONTRACT_ABI = []
 

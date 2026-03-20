@@ -124,20 +124,15 @@ def upload_certificate(request):
                 name=form.cleaned_data['name'],
                 email=assigned_user.email if assigned_user else form.cleaned_data['email'],  # <-- your line
                 file=file_obj,
-                uploaded_by_user=None,        # admin upload
+                uploaded_by_user=request.user,        # admin upload
                 is_user_uploaded=False,
                 assigned_to=assigned_user,    # correctly assign user object or None
                 file_hash=hash_value
             )
 
-            # --- Generate QR code ---
+            # Generate QR code with transaction placeholder
             qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=ERROR_CORRECT_H,
-                box_size=10,
-                border=4,
-            )
+            qr = qrcode.QRCode(version=1, error_correction=ERROR_CORRECT_H, box_size=10, border=4)
             qr.add_data(qr_url)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
@@ -147,29 +142,29 @@ def upload_certificate(request):
             certificate.qr_code.save(filename, ContentFile(buffer.getvalue()))
             certificate.save()
             buffer.close()
+            from certificate.utils import store_and_verify_certificate
+            store_and_verify_certificate(certificate)
 
-            # --- Store on Blockchain ---
+            # Add to blockchain
             try:
-                w3, contract = get_blockchain_connection()  # should return w3 and contract
-                tx_hash = contract.functions.storeCertificate(
-                    certificate.id,
-                    certificate.file_hash
-                ).transact({'from': w3.eth.accounts[0]})
-                w3.eth.wait_for_transaction_receipt(tx_hash)
-                messages.success(request, "Certificate recorded on blockchain!")
+                success = add_certificate_to_blockchain(certificate.id)
+                if success:
+                    certificate.is_verified = True
+                    certificate.save(update_fields=['is_verified'])
+                    messages.success(request, "Certificate uploaded and recorded on blockchain successfully!")
+                else:
+                    messages.warning(request, "Certificate uploaded, but blockchain recording failed.")
             except Exception as e:
-                messages.warning(request, f"Certificate uploaded, but blockchain recording failed: {e}")
+                messages.warning(request, f"Blockchain error: {e}")
 
             if not assigned_user:
                 messages.warning(request, f"No registered user with email '{user_email}'. Certificate unassigned.")
 
-            messages.success(request, "Certificate uploaded successfully!")
             return redirect('admin_dashboard')
     else:
         form = CertificateForm()
 
     return render(request, 'upload_certificate.html', {'form': form})
-
 # --------------------------------------------------
 # USER DASHBOARD
 from django.db.models import Q
@@ -178,6 +173,15 @@ def users_dashboard(request):
     certificates = Certificate.objects.filter(
         Q(assigned_to=request.user) | Q(uploaded_by_user=request.user)
     )
+    for cert in certificates:
+        try:
+            cert.is_verified = verify_certificate(cert.id)  # now working
+            cert.save(update_fields=['is_verified'])
+        except Exception as e:
+            print(f"❌ Blockchain error for cert {cert.id}: {e}")
+            cert.is_verified = False
+
+
     return render(request, 'users_dashboard.html', {
         'certificates': certificates
     })
@@ -296,6 +300,8 @@ def user_upload_certificate(request):
             cert.sha256_hash = hash_value
 
             cert.save()
+            from certificate.utils import store_and_verify_certificate
+            store_and_verify_certificate(cert)
 
             # Blockchain transaction
             try:

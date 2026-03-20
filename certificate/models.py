@@ -27,6 +27,7 @@ class Certificate(models.Model):
     is_verified = models.BooleanField(default=False)
     # uploaded certificate file
     file = models.FileField(upload_to='certificates/', blank=True, null=True)
+    
 
     # SHA256 hash
     file_hash = models.CharField(max_length=64, blank=True, editable=False)
