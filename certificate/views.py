@@ -1,5 +1,6 @@
 import email
 import hashlib
+from unittest import result
 import qrcode
 import os
 # from .blockchain import contract  # type: ignore
@@ -16,12 +17,11 @@ from qrcode.constants import ERROR_CORRECT_H
 from django.contrib.auth.models import User
 from django.http import FileResponse
 from django.http import HttpResponse
-from users.views import verify_certificate
+from .blockchain import verify_certificate as blockchain_verify
 from certificate.models import Certificate
-from .models import Certificate
 # at the top of certificate/views.py
 from .forms import CertificateForm
-from certificate.blockchain import  verify_certificate, add_certificate_to_blockchain
+from .blockchain import  verify_certificate, add_certificate, get_blockchain_connection
 from web3 import Web3  # Blockchain integration
 # --------------------------------------------------
 # CONNECT TO LOCAL BLOCKCHAIN (Ganache)
@@ -147,7 +147,7 @@ def upload_certificate(request):
 
             # Add to blockchain
             try:
-                success = add_certificate_to_blockchain(certificate.id)
+                success = add_certificate(certificate.id, certificate.file_hash)
                 if success:
                     certificate.is_verified = True
                     certificate.save(update_fields=['is_verified'])
@@ -173,14 +173,14 @@ def users_dashboard(request):
     certificates = Certificate.objects.filter(
         Q(assigned_to=request.user) | Q(uploaded_by_user=request.user)
     )
+
     for cert in certificates:
         try:
-            cert.is_verified = verify_certificate(cert.id)  # now working
+            cert.is_verified = verify_certificate(cert.id, cert.file_hash)
             cert.save(update_fields=['is_verified'])
         except Exception as e:
-            print(f"❌ Blockchain error for cert {cert.id}: {e}")
+            print(f"ERROR verifying cert {cert.id}: {e}")
             cert.is_verified = False
-
 
     return render(request, 'users_dashboard.html', {
         'certificates': certificates
@@ -234,24 +234,6 @@ def delete_certificate(request, pk):
     return redirect('admin_dashboard')
 
 # ------------------------
-## ------------------------
-def verify_certificate_in_blockchain(cert_id):
-    """
-    Verifies if a certificate exists on the blockchain.
-    Returns True if verified, False otherwise.
-    """
-    try:
-        # Example: assuming you have contract and web3 set up
-        # Replace these with your actual contract setup
-        w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:8545'))  # Ganache or other provider
-        contract_address = '0xDC2A8e12C90eBf6DD54f51772B451E53159649b7'
-        abi = ["blockchain/contract/DocumentVerification.json"]  # your contract ABI
-        contract = w3.eth.contract(address=contract_address, abi=abi)
-
-        return contract.functions.verifyCertificate(cert_id).call()
-    except Exception as e:
-        print("Blockchain verification error:", e)
-        return False
 # User: View Certificate
 # ------------------------
 @login_required(login_url='users_login')
@@ -265,15 +247,9 @@ def verify_certificate(request, cert_id):
     try:
         # Connect to blockchain
         w3, contract = get_blockchain_connection()
-        account_address = w3.eth.accounts[0]  # Ganache account
 
-        # Send transaction to record verification
-        tx_hash = contract.functions.verifyCertificate(cert_id).transact({'from': account_address})
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-
-        # Read hash from blockchain to confirm
-        blockchain_hash = contract.functions.getCertificate(cert_id).call()
-        verified = blockchain_hash == certificate.file_hash
+        # Call verifyCertificate (read-only)
+        verified = contract.functions.verifyCertificate(cert_id, certificate.file_hash).call()
 
     except Exception as e:
         messages.warning(request, f"Blockchain verification failed: {e}")

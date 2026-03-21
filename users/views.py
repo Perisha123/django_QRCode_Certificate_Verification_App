@@ -20,14 +20,14 @@ from django.utils.crypto import get_random_string
 from qrcode.constants import ERROR_CORRECT_H
 from web3 import Web3
 from django.conf import settings
-from certificate.blockchain import verify_certificate, add_certificate_to_blockchain
+from certificate.blockchain import verify_certificate, add_certificate
 
 # Import Certificate model and form
 from certificate.models import Certificate
 from certificate.forms import CertificateForm
 from users.forms import UserCertificateUploadForm
 from .blockchain_utils import push_certificates_to_blockchain
-
+from .blockchain_setup import contract, w3
 
 # Connect to Ganache
 # -----------------------------
@@ -41,7 +41,7 @@ else:
 # -----------------------------
 # Load deployed contract ABI and bytecode
 # -----------------------------
-CONTRACT_ADDRESS = "0xDC2A8e12C90eBf6DD54f51772B451E53159649b7"  # Replace with your deployed contract
+CONTRACT_ADDRESS = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"  # Replace with your deployed contract
 
 contract_path = os.path.join(
     settings.BASE_DIR,
@@ -51,19 +51,16 @@ contract_path = os.path.join(
 )
 
 with open(contract_path) as f:
-    contract_json = json.load(f)
-
-# Access the correct nested structure
-contract_data = contract_json["contracts"]["DocumentVerification.sol"]["DocumentVerification"]
-ABI = contract_data["abi"]
-BYTECODE = contract_data["evm"]["bytecode"]["object"]
+    ABI = json.load(f)  # ✅ Your JSON is already ABI
 
 # -----------------------------
 # Load contract instance
 # -----------------------------
+CONTRACT_ADDRESS = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"
+
 contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
 
-print("Contract loaded successfully!")
+print("✅ Contract loaded successfully!")
 # -----------------------------
 # View blockchain certificates
 # -----------------------------
@@ -87,19 +84,29 @@ def view_certificates_blockchain(request):
 
     for cert in certificates:
         try:
-            owner = contract.functions.getCertificateOwner(cert.id).call()
-            hash_on_chain = contract.functions.getCertificate(cert.id).call()
-            verified = hash_on_chain == cert.file_hash
+            doc = contract.functions.getDocument(cert.id).call()
+            print("🔹 Blockchain doc:", doc)
+            blockchain_hash = doc[0]
+            timestamp = doc[1]
+            owner_address = doc[2]
+            verified = (blockchain_hash == cert.file_hash)
+
         except Exception as e:
-            owner = "Error"
+            owner_address = "Error"
             verified = False
 
         blockchain_data.append({
             "name": cert.name,
             "hash": cert.file_hash,
-            "owner": owner,
-            "verified": verified
+            "owner": owner_address,
+            "verified": "✅" if verified else "❌",
+            "timestamp": timestamp if 'timestamp' in locals() else None
+
         })
+        message = None
+    if not blockchain_data:
+        message = "No certificates recorded on blockchain yet."
+
 
     context = {"certificates": blockchain_data}
     return render(request, "users/blockchain_certificates.html", context)
@@ -196,6 +203,8 @@ def user_certificates(request):
     # Filter certificates uploaded by the logged-in user
     certificates = Certificate.objects.filter(uploaded_by=request.user)
     return render(request, 'users/user_uload_certificates.html', {'certificates': certificates})
+
+
 def verify_certificate(cert_id):
     """Check if certificate ID exists on blockchain"""
     try:
@@ -308,7 +317,7 @@ def users_logout(request):
     messages.success(request, "You have been logged out successfully.")
     return redirect('home')
     
-def add_certificate_to_blockchain(cert_id):
+def add_certificate(cert_id, cert_file_hash):
     cert = Certificate.objects.get(id=cert_id)
     # Your blockchain logic: generate QR, hash, store on blockchain
     return True  # or some status
@@ -329,13 +338,19 @@ def blockchain_certificates(request):
         total = contract.functions.counter().call()  # total certificates on blockchain
         for i in range(1, total + 1):
             doc = contract.functions.getDocument(i).call()
-            # Only show certificates belonging to this user
-            if doc[2].lower() == request.user.email.lower():  # assuming owner stored as email
+            file_hash = doc[0]
+            timestamp = doc[1]
+            owner_address = doc[2]
+
+            # Optionally, check if this blockchain certificate exists in Django
+            cert_qs = Certificate.objects.filter(file_hash=file_hash, assigned_to=request.user)
+            if cert_qs.exists():
                 certificates.append({
                     "id": i,
-                    "file_hash": doc[0],
-                    "timestamp": doc[1],
-                    "owner": doc[2],
+                    "file_hash": file_hash,
+                    "timestamp": timestamp,
+                    "owner": owner_address,  # display Ethereum address
+                    "name": cert_qs.first().name
                 })
     except Exception as e:
         print("Error fetching blockchain data:", e)

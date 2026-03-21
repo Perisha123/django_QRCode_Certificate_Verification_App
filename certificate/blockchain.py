@@ -1,91 +1,95 @@
-from web3 import Web3
-from django.conf import settings
-from certificate.models import Certificate
-from pathlib import Path
+import os
 import json
+from web3 import Web3
 
-# --------------------------
-# Connect to Ganache & load contract
-# --------------------------
+# -----------------------------
+# 1️⃣ Connect to Ganache
+# -----------------------------
+w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
+if not w3.is_connected():
+    raise Exception("❌ Cannot connect to Ganache!")
+
+# Set default account for sending transactions
+w3.eth.default_account = w3.eth.accounts[0]
+
+# -----------------------------
+# 2️⃣ Load ABI from JSON
+# -----------------------------
+# BASE_DIR points to project root (where manage.py is)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Correct path to your JSON file
+json_path = os.path.join(BASE_DIR, "blockchain", "contracts", "DocumentVerification.json")
+
+with open(json_path) as f:
+    abi_list = json.load(f)
+
+# If JSON is a list (Remix export), use first element if needed
+if isinstance(abi_list, list) and len(abi_list) == 1 and "abi" in abi_list[0]:
+    abi = abi_list[0]["abi"]
+else:
+    abi = abi_list  # already a list of functions
+
+# -----------------------------
+# 3️⃣ Contract address
+# -----------------------------
+CONTRACT_ADDRESS = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"  # Replace with your deployed contract address
+
+# Create contract object
+contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=abi)
+
+# -----------------------------
+# 4️⃣ Helper functions
+# -----------------------------
+
+def add_certificate(cert_id: int, file_hash: str):
+    """Add a certificate to the blockchain"""
+    tx = contract.functions.addCertificate(cert_id, file_hash).transact()
+    receipt = w3.eth.wait_for_transaction_receipt(tx)
+    return receipt.transactionHash.hex()
+
+
+def verify_certificate(cert_id: int, file_hash: str) -> bool:
+    """Verify if a certificate exists on blockchain"""
+    return contract.functions.verifyCertificate(cert_id, file_hash).call()
+
 def get_blockchain_connection():
-    # Connect to Ganache
-    w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:8545'))  # Replace if your RPC differs
-    if not w3.is_connected():
-        raise ConnectionError("❌ Ganache is not connected!")
+    """
+    Returns a tuple (web3_instance, contract_instance)
+    """
+    w3_instance = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
+    if not w3_instance.is_connected():
+        raise Exception("Cannot connect to Ganache")
 
-    # Load contract ABI from JSON
-    contract_path = Path(settings.BASE_DIR) / 'blockchain' / 'contracts' / 'DocumentVerification.json'
-    with open(contract_path) as f:
-     contract_json = json.load(f)
+    w3_instance.eth.default_account = w3_instance.eth.accounts[0]
 
-    # Extract ABI
-    try:
-        abi = contract_json['contracts']['DocumentVerification.sol']['DocumentVerification']['abi']
-    except KeyError:
-        raise KeyError("❌ ABI not found in JSON. Check your compiled contract structure.")
+    # Load ABI
+    json_path = os.path.join(
+        os.path.dirname(__file__), "blockchain", "contracts", "DocumentVerification.json"
+    )
+    with open(json_path) as f:
+        abi_list = json.load(f)
+    if isinstance(abi_list, list) and len(abi_list) == 1 and "abi" in abi_list[0]:
+        abi = abi_list[0]["abi"]
+    else:
+        abi = abi_list
 
-    # Get deployed contract address from settings
-    contract_address = getattr(settings, 'CONTRACT_ADDRESS', None)
-    if not contract_address:
-        raise ValueError("❌ CONTRACT_ADDRESS not set in settings.py")
+    # Contract address (replace with your deployed contract)
+    CONTRACT_ADDRESS = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"
 
-    contract = w3.eth.contract(address=contract_address, abi=abi)
+    contract_instance = w3_instance.eth.contract(address=CONTRACT_ADDRESS, abi=abi)
+    return w3_instance, contract_instance
 
-    return w3, contract
 
-# --------------------------
-# Store certificate on blockchain
-# --------------------------
-def add_certificate_to_blockchain(cert_id):
-    try:
-        cert = Certificate.objects.get(id=cert_id)
-    except Certificate.DoesNotExist:
-        print(f"❌ Certificate with ID {cert_id} does not exist.")
-        return False
+def hash_exists(file_hash: str) -> bool:
+    """Check if a file hash already exists"""
+    return contract.functions.hashExists(file_hash).call()
 
-    w3, contract = get_blockchain_connection()
 
-    try:
-        tx_hash = contract.functions.storeDocument(cert.file_hash).transact({'from': w3.eth.accounts[0]})
-        w3.eth.wait_for_transaction_receipt(tx_hash)
-        print(f"✅ Certificate {cert.id} stored on blockchain!")
-        return True
-    except Exception as e:
-        print(f"❌ Failed to store certificate {cert.id}: {e}")
-        return False
-
-# --------------------------
-# Verify certificate on blockchain
-# --------------------------
-def verify_certificate(cert_id):
-    try:
-        cert = Certificate.objects.get(id=cert_id)
-    except Certificate.DoesNotExist:
-        print(f"❌ Certificate with ID {cert_id} does not exist.")
-        return False
-
-    w3, contract = get_blockchain_connection()
-
-    try:
-        verified = contract.functions.verifyDocument(cert.id, cert.file_hash).call()
-        print(f"✅ Verification result for certificate {cert.id}: {verified}")
-        return verified
-    except Exception as e:
-        print(f"❌ Error verifying certificate {cert.id}: {e}")
-        return False
-
-# --------------------------
-# Get certificate details from blockchain (optional)
-# --------------------------
-def get_certificate_from_blockchain(cert_id):
-    w3, contract = get_blockchain_connection()
-    try:
-        file_hash, timestamp, owner = contract.functions.getDocument(cert_id).call()
-        return {
-            "file_hash": file_hash,
-            "timestamp": timestamp,
-            "owner": owner
-        }
-    except Exception as e:
-        print(f"❌ Error fetching certificate {cert_id}: {e}")
-        return None
+def get_document(cert_id: int):
+    file_hash, timestamp, owner_address = contract.functions.getDocument(cert_id).call()
+    return {
+        "file_hash": file_hash,
+        "timestamp": timestamp,
+        "owner_address": owner_address
+    }

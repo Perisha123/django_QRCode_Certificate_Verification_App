@@ -3,7 +3,7 @@ import json
 import os
 
 # Connect to Ganache
-w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))  # replace port if different
+w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
 
 # Check connection
 if not w3.is_connected():
@@ -12,14 +12,14 @@ if not w3.is_connected():
 # Set default account (first Ganache account)
 w3.eth.default_account = w3.eth.accounts[0]
 
-# Load compiled contract JSON
+# Load compiled contract JSON (Remix format)
 json_path = os.path.join(os.path.dirname(__file__), "contracts/DocumentVerification.json")
 with open(json_path) as f:
     contract_json = json.load(f)
 
-# Get ABI and Bytecode
-abi = contract_json['contracts']['DocumentVerification.sol']['DocumentVerification']['abi']
-bytecode = contract_json['contracts']['DocumentVerification.sol']['DocumentVerification']['evm']['bytecode']['object']
+# Get ABI and bytecode
+abi = contract_json['abi']
+bytecode = contract_json['bytecode']
 
 # Create contract instance
 DocumentVerification = w3.eth.contract(abi=abi, bytecode=bytecode)
