@@ -56,7 +56,7 @@ with open(contract_path) as f:
 # -----------------------------
 # Load contract instance
 # -----------------------------
-CONTRACT_ADDRESS = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"
+CONTRACT_ADDRESS = "0x184a20380803992726C45c8c43b2bBA075d3F31c"
 
 contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
 
@@ -88,17 +88,18 @@ def view_certificates_blockchain(request):
             print("🔹 Blockchain doc:", doc)
             blockchain_hash = doc[0]
             timestamp = doc[1]
-            owner_address = doc[2]
             verified = (blockchain_hash == cert.file_hash)
 
         except Exception as e:
-            owner_address = "Error"
+            print(f"⚠ Blockchain fetch error for cert {cert.id}: {e}")
+
+            blockchain_hash = None
+            timestamp = None
             verified = False
 
         blockchain_data.append({
             "name": cert.name,
             "hash": cert.file_hash,
-            "owner": owner_address,
             "verified": "✅" if verified else "❌",
             "timestamp": timestamp if 'timestamp' in locals() else None
 

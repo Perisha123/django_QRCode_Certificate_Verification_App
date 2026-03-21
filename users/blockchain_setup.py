@@ -24,7 +24,7 @@ with open(json_path) as f:
 # -----------------------------
 # 3️⃣ Contract address
 # -----------------------------
-contract_address = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"  # Replace with your deployed contract address
+contract_address = "0x184a20380803992726C45c8c43b2bBA075d3F31c"  # Replace with your deployed contract address
 
 # Create contract instance
 contract = w3.eth.contract(address=contract_address, abi=abi)

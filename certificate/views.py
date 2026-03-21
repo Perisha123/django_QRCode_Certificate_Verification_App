@@ -106,6 +106,19 @@ def admin_dashboard(request):
     })
 
 
+
+from users.blockchain_setup import contract, w3  # your Web3 + contract
+def record_certificate_on_chain(certificate):
+    try:
+        cert_hash = certificate.hash
+        tx_hash = contract.functions.storeCertificateHash(cert_hash).transact({'from': w3.eth.accounts[0]})
+        w3.eth.wait_for_transaction_receipt(tx_hash)
+        certificate.is_verified = True
+        certificate.save()
+    except Exception as e:
+        print("Blockchain recording failed:", e)
+
+
 # --------------------------------------------------
 # UPLOAD CERTIFICATE (User + Blockchain)@login_required(login_url='users_login')
 def upload_certificate(request):
@@ -356,10 +369,30 @@ def export_certificates_excel(request):
     
     # Data rows
     for cert in certificates:
-        ws.append([cert.id, cert.user.email, cert.name, cert.hash, cert.created_at.strftime('%Y-%m-%d %H:%M')])
+        ws.append([cert.id, cert.email, cert.name, cert.file_hash, cert.created_at.strftime('%Y-%m-%d %H:%M')])
     
     # Prepare response
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename=certificates.xlsx'
     wb.save(response)
     return response
+
+
+def view_certificates_html(request):
+    # Fetch all certificates
+    certificates = Certificate.objects.all()
+    return render(request, 'certificates_table.html', {'certificates': certificates})
+
+def verify_certificate_on_blockchain(request, certificate_id):
+    certificate = get_object_or_404(Certificate, id=certificate_id)
+
+    # send certificate to blockchain
+    tx = contract.functions.addCertificate(certificate.id, certificate.file_hash).transact({'from': w3.eth.accounts[0]})
+    receipt = w3.eth.wait_for_transaction_receipt(tx)
+
+    # update the certificate
+    certificate.is_verified = True
+    certificate.blockchain_tx_hash = receipt.transactionHash.hex()  # must be a real DB field!
+    certificate.save(update_fields=['is_verified', 'blockchain_tx_hash'])
+
+    return redirect('certificate_detail', certificate_id=certificate.id)

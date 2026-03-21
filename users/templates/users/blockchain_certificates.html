@@ -1,11 +1,13 @@
 {% if certificates %}
 <table class="table table-striped">
+    <div style="margin-bottom: 20px;">
+    <a href="{% url 'users:dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
+</div>
     <thead>
         <tr>
             <th>#</th>
             <th>Certificate Name</th>
             <th>Certificate Hash</th>
-            <th>Owner Address</th>
             <th>Verified on Blockchain</th>
         </tr>
     </thead>
@@ -31,4 +33,5 @@
 <div class="alert alert-info">
     No certificates found on blockchain for your account.
 </div>
+
 {% endif %}

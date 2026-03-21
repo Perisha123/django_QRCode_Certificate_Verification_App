@@ -18,6 +18,8 @@ urlpatterns = [
 
     # User routes
     path('users_dashboard/', views.users_dashboard, name='users_dashboard'),
+    path('view/', views.view_certificates_html, name='view_certificates_html'),
+
     path('user_upload/', views.user_upload_certificate, name='user_upload_certificate'),
 
     # Verify certificate

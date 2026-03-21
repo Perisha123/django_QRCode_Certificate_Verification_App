@@ -1,15 +1,17 @@
-from certificate.blockchain import add_certificate
+# certificate/utils.py
+from users.blockchain_setup import w3, contract
 
-def store_and_verify_certificate(cert):
-    """
-    Add a certificate to blockchain and update `is_verified` flag.
-    """
+def store_and_verify_certificate(certificate):
     try:
-        success = add_certificate(cert.id, cert.file_hash)
-        if success:
-            cert.is_verified = True
-            cert.save(update_fields=['is_verified'])
+        cert_hash = certificate.file_hash
+        tx_hash = contract.functions.storeCertificateHash(cert_hash).transact({'from': w3.eth.accounts[0]})
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt.status == 1:
+            certificate.is_verified = True
+            certificate.save(update_fields=['is_verified'])
             return True
+        else:
+            return False
     except Exception as e:
-        print(f"❌ Blockchain error for certificate {cert.id}: {e}")
-    return False
+        print("Blockchain recording failed:", e)
+        return False

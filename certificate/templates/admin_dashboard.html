@@ -35,6 +35,8 @@
 <div class="mb-3">
     <a href="{% url 'export_certificates_excel' %}" class="btn btn-success">Export Excel</a>
 </div>
+<a href="{% url 'view_certificates_html' %}">View Certificates in Browser</a> |
+
 
 <form method="GET" action="{% url 'admin_dashboard' %}" class="mb-3">
     <input type="text" name="q" placeholder="Search certificates..." 

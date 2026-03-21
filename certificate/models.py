@@ -27,6 +27,7 @@ class Certificate(models.Model):
     is_verified = models.BooleanField(default=False)
     # uploaded certificate file
     file = models.FileField(upload_to='certificates/', blank=True, null=True)
+    blockchain_tx_hash = models.CharField(max_length=66, blank=True, null=True)  # 66 chars for Ethereum tx hash
     
 
     # SHA256 hash
