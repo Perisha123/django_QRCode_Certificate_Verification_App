@@ -26,6 +26,8 @@ urlpatterns = [
 
     # Certificate download
     path('download/<int:cert_id>/', views.certificate_download, name='certificate_download'),
+    path('export/excel/', views.export_certificates_excel, name='export_certificates_excel'),
+
 
     # User logout
     path('logout/', views.users_logout, name='logout'),

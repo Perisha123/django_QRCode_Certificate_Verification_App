@@ -31,7 +31,17 @@
 
   <!-- Total Certificates -->
   <h4>Total Certificates: {{ total|default:"0" }}</h4>
+<!-- Excel Export Button -->
+<div class="mb-3">
+    <a href="{% url 'export_certificates_excel' %}" class="btn btn-success">Export Excel</a>
+</div>
 
+<form method="GET" action="{% url 'admin_dashboard' %}" class="mb-3">
+    <input type="text" name="q" placeholder="Search certificates..." 
+           value="{{ request.GET.q }}" 
+           class="form-control" style="width: 300px; display:inline-block;">
+    <button type="submit" class="btn btn-primary">Search</button>
+</form>
   <!-- Certificates Table -->
   <table class="table table-bordered table-striped mt-3">
     <thead class="table-dark">
@@ -71,6 +81,7 @@
           <td colspan="5" class="text-center">No certificates uploaded yet.</td>
         </tr>
       {% endfor %}
+      
     </tbody>
   </table>
 

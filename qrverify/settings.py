@@ -150,3 +150,4 @@ LOGIN_REDIRECT_URL = '/admin-dashboard/'
 
 USER_LOGIN_URL = '/users/login/'        # login page for normal users
 USER_LOGIN_REDIRECT_URL = '/users/access/'  # dashboard after login
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

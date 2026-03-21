@@ -3,6 +3,8 @@ from django.urls import path
 from django.contrib.auth.views import LogoutView
 from certificate import views as cert_views
 from . import views
+from django.contrib.auth import views as auth_views
+
 from users.views import users_access, users_login, users_register, users_dashboard  # <-- correct name
 
 app_name = "users"
@@ -24,4 +26,32 @@ urlpatterns = [
 
     # Logout and redirect to portal home page
     path('logout/', LogoutView.as_view(next_page='home'), name='users_logout'),
+
+    path('password-reset/',
+         auth_views.PasswordResetView.as_view(
+             template_name='users/password_reset.html',      # Form page
+             email_template_name='users/password_reset_email.html',
+             subject_template_name='users/password_reset_subject.txt',
+             success_url='/users/password-reset/done/'       # After submitting email
+         ),
+         name='password_reset'),
+
+    path('password-reset/done/',
+         auth_views.PasswordResetDoneView.as_view(
+             template_name='users/password_reset_done.html'
+         ),
+         name='password_reset_done'),
+
+    path('reset/<uidb64>/<token>/',
+         auth_views.PasswordResetConfirmView.as_view(
+             template_name='users/password_reset_confirm.html',
+             success_url='/users/reset/done/'               # After changing password
+         ),
+         name='password_reset_confirm'),
+
+    path('reset/done/',
+         auth_views.PasswordResetCompleteView.as_view(
+             template_name='users/password_reset_complete.html'
+         ),
+         name='password_reset_complete'),
 ]

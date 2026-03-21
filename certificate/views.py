@@ -3,6 +3,7 @@ import hashlib
 from unittest import result
 import qrcode
 import os
+from openpyxl import Workbook
 # from .blockchain import contract  # type: ignore
 from io import BytesIO
 from django.core.files.base import ContentFile
@@ -86,33 +87,57 @@ def admin_logout(request):
 
 @staff_member_required(login_url='admin_login')
 def admin_dashboard(request):
-
     certificates = Certificate.objects.filter(
-        is_user_uploaded=False   # ✅ only admin certificates
+        is_user_uploaded=False  # only admin certificates
     ).order_by('-created_at')
+
+    query = request.GET.get('q')  # get search input
+    if query:
+        certificates = certificates.filter(
+            Q(name__icontains=query) | Q(user__email__icontains=query)
+        )
 
     total = certificates.count()
 
     return render(request, 'admin_dashboard.html', {
         'certificates': certificates,
-        'total': total
+        'total': total,
+        'query': query  # keep search input in form
     })
 
 
 # --------------------------------------------------
-# UPLOAD CERTIFICATE (User + Blockchain)
-@login_required(login_url='users_login')
+# UPLOAD CERTIFICATE (User + Blockchain)@login_required(login_url='users_login')
 def upload_certificate(request):
     if request.method == "POST":
         form = CertificateForm(request.POST, request.FILES)
 
         if form.is_valid():
-            file_obj = request.FILES['file']
+            file_obj = request.FILES.get('file')
+            
+            # ✅ Check if file is uploaded
+            if not file_obj:
+                messages.error(request, "No file uploaded.")
+                return redirect('upload_certificate')
+
+            # ✅ Validate PDF
+            if not file_obj.name.endswith('.pdf'):
+                messages.error(request, "Only PDF files are allowed!")
+                return redirect('upload_certificate')
+
+            if file_obj.content_type != 'application/pdf':
+                messages.error(request, "Uploaded file is not a valid PDF.")
+                return redirect('upload_certificate')
+
+            # ✅ Check empty file
             file_data = file_obj.read()
             if not file_data:
                 messages.error(request, "Uploaded file is empty.")
                 return redirect('upload_certificate')
-            file_obj.seek(0)
+
+            file_obj.seek(0)  # reset pointer for saving
+
+            # ✅ Generate file hash
             hash_value = hashlib.sha256(file_data).hexdigest()
 
             # --- Get the actual user by email ---
@@ -122,15 +147,15 @@ def upload_certificate(request):
             # --- Create certificate ---
             certificate = Certificate.objects.create(
                 name=form.cleaned_data['name'],
-                email=assigned_user.email if assigned_user else form.cleaned_data['email'],  # <-- your line
+                email=assigned_user.email if assigned_user else form.cleaned_data['email'],
                 file=file_obj,
-                uploaded_by_user=request.user,        # admin upload
+                uploaded_by_user=request.user,
                 is_user_uploaded=False,
-                assigned_to=assigned_user,    # correctly assign user object or None
+                assigned_to=assigned_user,
                 file_hash=hash_value
             )
 
-            # Generate QR code with transaction placeholder
+            # --- Generate QR code ---
             qr_url = f"{request.scheme}://{request.get_host()}/verify/{hash_value}/"
             qr = qrcode.QRCode(version=1, error_correction=ERROR_CORRECT_H, box_size=10, border=4)
             qr.add_data(qr_url)
@@ -142,10 +167,10 @@ def upload_certificate(request):
             certificate.qr_code.save(filename, ContentFile(buffer.getvalue()))
             certificate.save()
             buffer.close()
+
+            # --- Blockchain ---
             from certificate.utils import store_and_verify_certificate
             store_and_verify_certificate(certificate)
-
-            # Add to blockchain
             try:
                 success = add_certificate(certificate.id, certificate.file_hash)
                 if success:
@@ -315,3 +340,26 @@ def certificate_download(request, cert_id):
         return FileResponse(open(file_path, 'rb'), as_attachment=True)
     else:
         return HttpResponse("File not found.")
+    
+
+@login_required
+def export_certificates_excel(request):
+    certificates = Certificate.objects.all()
+    
+    # Create a new workbook and sheet
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Certificates"
+    
+    # Header row
+    ws.append(['ID', 'User Email', 'Certificate Name', 'Hash', 'Created At'])
+    
+    # Data rows
+    for cert in certificates:
+        ws.append([cert.id, cert.user.email, cert.name, cert.hash, cert.created_at.strftime('%Y-%m-%d %H:%M')])
+    
+    # Prepare response
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=certificates.xlsx'
+    wb.save(response)
+    return response
