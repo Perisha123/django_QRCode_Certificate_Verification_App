@@ -41,7 +41,7 @@ else:
 # -----------------------------
 # Load deployed contract ABI and bytecode
 # -----------------------------
-CONTRACT_ADDRESS = "0x70636583A4bfe37eA81b0DEb086137c34b93f421"  # Replace with your deployed contract
+CONTRACT_ADDRESS = "0xB732c3a83Ef1Fcb9865E6D0f3B9fea0bc9371B70"  # Replace with your deployed contract
 
 contract_path = os.path.join(
     settings.BASE_DIR,
